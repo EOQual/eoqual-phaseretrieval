@@ -134,6 +134,120 @@ def compute_pupil_footprint_px(
     return n_pup_target
 
 
+def _detect_aperture_bbox(
+    raw: NDArray[np.float64],
+    threshold_frac: float,
+) -> Tuple[int, int, int, int]:
+    """
+    Bounding box (row_min, row_max, col_min, col_max — inclusive) of the
+    pixels above ``threshold_frac * raw.max()`` in ``raw``.
+
+    Parameters
+    ----------
+    raw : NDArray
+        Source array.
+    threshold_frac : float
+        Fraction of ``raw.max()`` above which a pixel counts as
+        "illuminated". Small (not exactly 0) on purpose: tolerates the
+        near-zero-but-not-quite background of a real file (compression
+        artefacts, a graded/apodised mask's own faint tail) without
+        being fooled by them into including the whole array.
+
+    Returns
+    -------
+    tuple of int
+        ``(row_min, row_max, col_min, col_max)``.
+
+    Raises
+    ------
+    ValueError
+        If no pixel is above the threshold.
+    """
+    lit = raw > (threshold_frac * raw.max())
+    rows, cols = np.any(lit, axis=1), np.any(lit, axis=0)
+    if not rows.any():
+        raise ValueError(
+            f"Aucun pixel au-dessus de {threshold_frac:.1%} du maximum "
+            f"({raw.max():.3g}) — impossible de détecter l'ouverture "
+            "automatiquement. Réduire aperture_threshold, ou fournir "
+            "explicitement native_aperture_px."
+        )
+    row_min, row_max = int(np.flatnonzero(rows)[0]), int(np.flatnonzero(rows)[-1])
+    col_min, col_max = int(np.flatnonzero(cols)[0]), int(np.flatnonzero(cols)[-1])
+    return row_min, row_max, col_min, col_max
+
+
+def _crop_to_aperture(
+    raw: NDArray[np.float64],
+    *,
+    native_aperture_px: Optional[int],
+    aperture_threshold: float,
+) -> NDArray[np.float64]:
+    """
+    Crop ``raw`` down to just its illuminated aperture, stripping any
+    zero (or near-zero) margin around it — a no-op when the aperture
+    already fills the whole array (the assumption
+    :func:`_resample_to_footprint` otherwise makes on its input), so this
+    is always safe to call before it.
+
+    Parameters
+    ----------
+    raw : NDArray
+        Source array (mask or HO WFE map), at its own native resolution.
+    native_aperture_px : int, optional
+        If given, the aperture is known to span exactly this many pixels,
+        centred on ``raw``'s own centre — skips auto-detection entirely
+        (the robust choice when the source file's own convention is
+        known, e.g. documented by the tool that produced it).
+        ``None`` (default): auto-detect the aperture's bounding box from
+        the pixel content (see ``aperture_threshold``), then crop a
+        square centred on that bounding box's centre, sized to its
+        larger dimension.
+    aperture_threshold : float
+        Only used when ``native_aperture_px is None`` — see
+        :func:`_detect_aperture_bbox`.
+
+    Returns
+    -------
+    NDArray
+        The cropped, square aperture sub-image.
+
+    Raises
+    ------
+    ValueError
+        If the requested/detected aperture window does not fit within
+        ``raw`` (off-centre content, or ``native_aperture_px`` too large).
+    """
+    if native_aperture_px is None:
+        row_min, row_max, col_min, col_max = _detect_aperture_bbox(raw, aperture_threshold)
+        size = max(row_max - row_min + 1, col_max - col_min + 1)
+        if size > raw.shape[0] or size > raw.shape[1]:
+            raise ValueError(
+                f"Ouverture détectée ({size}x{size} px) plus grande que le "
+                f"fichier source ({raw.shape[0]}x{raw.shape[1]}) — impossible."
+            )
+        # Fenêtre carrée de ce côté, centrée sur la boîte englobante
+        # détectée, puis **décalée** (jamais déformée) pour rester dans le
+        # fichier — au lieu de dériver le coin à partir d'un centre
+        # arrondi (piège classique de parité : une ouverture inscrite qui
+        # touche déjà les 4 bords, taille paire, donnait un centre décalé
+        # d'un demi-pixel et donc une fenêtre hors limites alors que le
+        # fichier entier convient tel quel).
+        r0 = min(max(row_min - (size - (row_max - row_min + 1)) // 2, 0), raw.shape[0] - size)
+        c0 = min(max(col_min - (size - (col_max - col_min + 1)) // 2, 0), raw.shape[1] - size)
+    else:
+        size = native_aperture_px
+        if size > raw.shape[0] or size > raw.shape[1]:
+            raise ValueError(
+                f"native_aperture_px={size} plus grand que le fichier source "
+                f"({raw.shape[0]}x{raw.shape[1]}) — impossible."
+            )
+        r0 = (raw.shape[0] - size) // 2
+        c0 = (raw.shape[1] - size) // 2
+
+    return raw[r0:r0 + size, c0:c0 + size]
+
+
 def _resample_to_footprint(
     raw: NDArray[np.float64],
     npix: int,
@@ -144,9 +258,12 @@ def _resample_to_footprint(
 ) -> NDArray[np.float64]:
     """
     Resize ``raw`` (its **whole** array extent taken as the aperture
-    footprint, edge to edge — the convention already used by
-    :class:`pupil.PupilGenerator`) to ``n_pup_target`` x ``n_pup_target``,
-    then zero-pad/centre it into an ``npix`` x ``npix`` canvas.
+    footprint, edge to edge — the convention used by
+    :class:`pupil.PupilGenerator`, and what ``raw`` has already been
+    reduced to by :func:`_crop_to_aperture` upstream in both callers, even
+    when the *source file* had a zero margin around the aperture) to
+    ``n_pup_target`` x ``n_pup_target``, then zero-pad/centre it into an
+    ``npix`` x ``npix`` canvas.
 
     Shared resampling step for both a pupil mask (see
     ``load_and_prepare_mask``) and an HO WFE map (see
@@ -202,6 +319,8 @@ def load_and_prepare_mask(
     oversampling: int = 1,
     *,
     binarize: bool = True,
+    native_aperture_px: Optional[int] = None,
+    aperture_threshold: float = 0.01,
 ) -> Tuple[NDArray[np.float64], Optional[int]]:
     """
     Load a pupil mask, resize it to the physical pupil size that
@@ -223,10 +342,25 @@ def load_and_prepare_mask(
         Shape of the PSF image (must be square, e.g. ``(N_psf, N_psf)``).
     mask_path : str or pathlib.Path
         Path to the raw mask image (binary or grayscale), at **its own**
-        native resolution — unrelated to ``psf_shape``; only its overall
-        aspect (the aperture fills the whole image, edge to edge) matters.
+        native resolution — unrelated to ``psf_shape``. The aperture need
+        *not* fill the whole image edge to edge: a zero (or near-zero)
+        margin around it is auto-detected and stripped before the
+        physical resize — see ``native_aperture_px``/``aperture_threshold``
+        and §12.3 of ``REFERENCE_TECHNIQUE.md``.
     wavelength, focal_length, pupil_diameter, pixel_pitch, oversampling
         See :func:`compute_pupil_footprint_px`.
+    native_aperture_px : int, optional
+        If the aperture's own pixel span within ``mask_path`` is known
+        (documented by whoever produced the file), pass it here for a
+        robust, deterministic crop instead of relying on
+        ``aperture_threshold`` auto-detection — see
+        :func:`_crop_to_aperture`. ``None`` (default): auto-detect.
+    aperture_threshold : float, default 0.01
+        Only used when ``native_aperture_px`` is ``None``: fraction of the
+        mask's own maximum value above which a pixel counts as part of
+        the aperture, for auto-detecting its bounding box. Irrelevant
+        when the aperture already fills the whole file (the box then
+        spans the full array — a no-op crop).
     binarize : bool, default True
         If True (default, historical behaviour), threshold the result at
         ``0.5`` to a strict binary mask after resampling. If False, keep
@@ -276,11 +410,18 @@ def load_and_prepare_mask(
         N_psf, wavelength, focal_length, pupil_diameter, pixel_pitch, oversampling,
     )
 
+    # Marge éventuelle (zéros autour de l'ouverture) retirée avant la mise
+    # à l'échelle physique — sinon cette marge serait comprimée avec
+    # l'ouverture elle-même dans n_pup_target au lieu d'être ignorée.
+    mask_aperture = _crop_to_aperture(
+        mask_raw, native_aperture_px=native_aperture_px, aperture_threshold=aperture_threshold,
+    )
+
     # Interpolation bilinéaire + anti-aliasing (plutôt que plus-proche-voisin
     # sans anti-aliasing) : réduit les artefacts d'aliasing sur les
     # structures fines (bras d'araignée) lors d'un sous-échantillonnage,
     # avant un éventuel seuillage binaire.
-    mask = _resample_to_footprint(mask_raw, N_psf, n_pup_target, order=1, anti_aliasing=True)
+    mask = _resample_to_footprint(mask_aperture, N_psf, n_pup_target, order=1, anti_aliasing=True)
     if binarize:
         mask = (mask > 0.5).astype(np.float64)
 
@@ -299,6 +440,9 @@ def load_and_prepare_ho_wfe(
     pupil_diameter: float,
     pixel_pitch: float,
     oversampling: int = 1,
+    *,
+    native_aperture_px: Optional[int] = None,
+    aperture_threshold: float = 0.01,
 ) -> NDArray[np.float64]:
     """
     Load a known, fixed high-order (HO) WFE map [nm] at its own native
@@ -321,11 +465,23 @@ def load_and_prepare_ho_wfe(
     psf_shape : tuple[int, int]
         Shape of the PSF image (must be square).
     ho_wfe_path : str or pathlib.Path
-        Path to the raw WFE map [nm], at its own native resolution.
+        Path to the raw WFE map [nm], at its own native resolution. As
+        for the mask, need not fill the whole file edge to edge — a zero
+        margin around it is stripped the same way, see
+        ``native_aperture_px``.
     wavelength, focal_length, pupil_diameter, pixel_pitch, oversampling
         See :func:`compute_pupil_footprint_px`. Must match the values
         used for the accompanying :func:`load_and_prepare_mask` call, so
         both land on the same footprint.
+    native_aperture_px : int, optional
+        See :func:`load_and_prepare_mask`. Recommended over the default
+        auto-detection for a WFE map specifically: unlike a binary mask,
+        a smooth WFE surface can legitimately be near-zero within part of
+        the aperture too (not just outside it), which auto-detection
+        cannot always tell apart from padding.
+    aperture_threshold : float, default 0.01
+        See :func:`load_and_prepare_mask`. Only used when
+        ``native_aperture_px`` is ``None``.
 
     Returns
     -------
@@ -356,7 +512,10 @@ def load_and_prepare_ho_wfe(
     n_pup_target = compute_pupil_footprint_px(
         N_psf, wavelength, focal_length, pupil_diameter, pixel_pitch, oversampling,
     )
-    return _resample_to_footprint(ho_wfe_raw, N_psf, n_pup_target, order=3, anti_aliasing=True)
+    ho_wfe_aperture = _crop_to_aperture(
+        ho_wfe_raw, native_aperture_px=native_aperture_px, aperture_threshold=aperture_threshold,
+    )
+    return _resample_to_footprint(ho_wfe_aperture, N_psf, n_pup_target, order=3, anti_aliasing=True)
 
 
 def plot_array_plotly(

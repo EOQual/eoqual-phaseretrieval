@@ -1117,14 +1117,66 @@ preuve d'enregistrement correct si la source est un outil indépendant.
   disponible est ici la méthode qui perd le moins d'information sur une
   surface lisse.
 
-### 12.3 Statut
+### 12.3 Ouverture plus petite que le fichier : marge de zéros autour
+
+Cas fréquent en pratique : le fichier masque (ou carte HO) est **plus
+grand** que l'ouverture elle-même — exporté sur un cadre de taille fixe,
+avec une marge de zéros (ou de valeurs quasi nulles) tout autour, plutôt
+que de cadrer exactement sur l'ouverture. `_resample_to_footprint`
+suppose au contraire que **tout** le tableau source est l'ouverture, bord
+à bord (la convention de `PupilGenerator`) : sans précaution, cette marge
+serait comprimée avec l'ouverture dans `N_pup_target` au lieu d'être
+ignorée — l'ouverture reconstruite sur la grille de travail ressortirait
+alors artificiellement plus petite qu'elle ne l'est réellement.
+
+`load_and_prepare_mask`/`load_and_prepare_ho_wfe` recadrent donc d'abord
+sur l'ouverture (`_crop_to_aperture`) avant la mise à l'échelle physique,
+sur le chemin de mise à l'échelle physique uniquement (pas quand le
+fichier est déjà sur la grille de travail — §12.2, cette marge-là est déjà
+la bonne). Deux façons de le piloter :
+
+- **Auto-détection** (par défaut) : la boîte englobante des pixels
+  au-dessus de `aperture_threshold` (fraction du maximum du fichier,
+  `0.01` par défaut) est recadrée en un carré centré dessus. Sans effet
+  quand l'ouverture remplit déjà tout le fichier (recadrage vide). Fiable
+  pour un masque net (binaire ou peu bruité) ; à éviter pour une carte HO
+  dont certaines zones *à l'intérieur* de l'ouverture peuvent être
+  légitimement proches de zéro (rien ne les distingue alors de la marge).
+- **`native_aperture_px`** : indique directement le nombre de pixels
+  qu'occupe l'ouverture dans le fichier source (centrée), quand cette
+  valeur est connue (documentée par l'outil qui a produit le fichier) —
+  plus robuste que l'auto-détection, en particulier pour une carte HO.
+
+```python
+coeffs_nm, phase_fit_nm, diagnostics = psf_to_wfe(
+    psf_path, mask_path, wavelength, focal_length, pupil_diameter, pixel_pitch,
+    method="optimization",
+    mask_native_aperture_px=300,   # ouverture = 300 px dans le fichier masque
+    known_ho_wfe_path=ho_wfe_path,
+    ho_native_aperture_px=180,     # ouverture = 180 px dans le fichier carte HO (peut différer)
+)
+```
+
+En CLI : `--mask_native_aperture_px`, `--ho_native_aperture_px`,
+`--aperture_threshold`. Testé (`tests/test_multi_resolution.py`,
+`test_load_and_prepare_mask_autodetects_padding_margin` et suivants) :
+`N_pup_target` reste identique à un fichier sans marge (ne dépend que des
+paramètres physiques, jamais de la marge du fichier source), et un cas de
+bout en bout avec masque *et* carte HO chacun sur un cadre plus grand que
+leur ouverture (tailles de marge différentes entre les deux) recouvre la
+vérité de Zernike.
+
+### 12.4 Statut
 
 Implémenté pour les trois méthodes via `psf_to_wfe(..., pixel_pitch=,
-oversampling=, mask_binarize=)` / `--pixel_pitch`/`--oversampling`/
-`--mask_no_binarize` en CLI. `eoqual.phaseretrieval.simulation` reste, à
-ce stade, à résolution unique (masque construit directement sur `npix` via
-`PupilGenerator`) — simuler un cas de test avec masque/PSF à des
-résolutions natives différentes reste à faire manuellement (voir
+oversampling=, mask_binarize=, mask_native_aperture_px=,
+ho_native_aperture_px=, aperture_threshold=)` / `--pixel_pitch`/
+`--oversampling`/`--mask_no_binarize`/`--mask_native_aperture_px`/
+`--ho_native_aperture_px`/`--aperture_threshold` en CLI.
+`eoqual.phaseretrieval.simulation` reste, à ce stade, à résolution unique
+(masque construit directement sur `npix` via `PupilGenerator`) — simuler
+un cas de test avec masque/PSF à des résolutions natives différentes (ou
+avec une marge de zéros) reste à faire manuellement (voir
 `tests/test_multi_resolution.py` pour le patron).
 
 ---

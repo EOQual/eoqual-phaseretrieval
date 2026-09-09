@@ -64,6 +64,9 @@ def psf_to_wfe(
     zernike_order: int = 36,
     orthogonal_basis: bool = False,
     mask_binarize: bool = True,
+    mask_native_aperture_px: Optional[int] = None,
+    ho_native_aperture_px: Optional[int] = None,
+    aperture_threshold: float = 0.01,
     verbose: bool = True,
     # --- Gerchberg-Saxton ---
     max_iter: int = 200,
@@ -130,6 +133,21 @@ def psf_to_wfe(
         matters when the mask is *not* already on the PSF's own grid (the
         physical-rescale path); a mask already pre-registered is used
         as-is either way.
+    mask_native_aperture_px, ho_native_aperture_px : int, optional
+        The aperture's own pixel span *within* ``mask_path``/
+        ``known_ho_wfe_path``, when the source file has a zero (or
+        near-zero) margin around the aperture rather than filling the
+        frame edge to edge — e.g. a mask exported at a fixed canvas size
+        larger than the pupil. ``None`` (default): auto-detected from the
+        pixel content (see ``aperture_threshold``) — a no-op when the
+        aperture already fills the file. Only relevant on the
+        physical-rescale path (source shape different from the PSF's);
+        see §12.3 of ``REFERENCE_TECHNIQUE.md``.
+    aperture_threshold : float, default 0.01
+        Fraction of the source file's own maximum value above which a
+        pixel counts as part of the aperture, for the auto-detection
+        above. Ignored wherever the corresponding ``*_native_aperture_px``
+        is given.
     verbose : bool, default True
         Print progress / solver traces and display Plotly diagnostics.
     max_iter : int
@@ -227,6 +245,8 @@ def psf_to_wfe(
         pixel_pitch=pixel_pitch,
         oversampling=oversampling,
         binarize=mask_binarize,
+        native_aperture_px=mask_native_aperture_px,
+        aperture_threshold=aperture_threshold,
     )
 
     known_ho_wfe_nm: Optional[NDArray[np.float64]] = None
@@ -239,6 +259,8 @@ def psf_to_wfe(
             pupil_diameter=pupil_diameter,
             pixel_pitch=pixel_pitch,
             oversampling=oversampling,
+            native_aperture_px=ho_native_aperture_px,
+            aperture_threshold=aperture_threshold,
         )
 
     rad_to_nm = wavelength * 1e9 / (2.0 * np.pi)
@@ -376,6 +398,22 @@ def build_arg_parser() -> argparse.ArgumentParser:
              "instead of thresholding it to strict {0,1} (default: binarize).",
     )
     parser.add_argument(
+        "--mask_native_aperture_px", type=int, default=None,
+        help="Aperture's own pixel span within --mask, if it has a zero margin "
+             "around it rather than filling the file edge to edge (default: "
+             "auto-detected from the pixel content, see --aperture_threshold).",
+    )
+    parser.add_argument(
+        "--ho_native_aperture_px", type=int, default=None,
+        help="Same as --mask_native_aperture_px, for --known_ho_wfe.",
+    )
+    parser.add_argument(
+        "--aperture_threshold", type=float, default=0.01,
+        help="Fraction of the mask's/HO map's own maximum value above which a "
+             "pixel counts as part of the aperture, for auto-detecting its "
+             "margin. Ignored wherever *_native_aperture_px is given.",
+    )
+    parser.add_argument(
         "--orthogonal_basis", action="store_true",
         help="Fit on a Gram-Schmidt basis re-orthogonalised on the actual "
              "pupil mask instead of the standard Noll basis (recommended "
@@ -410,7 +448,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--known_ho_wfe", type=Path, default=None,
         help="[optimization, phase_diversity] Path to a known, fixed "
-             "high-order WFE map [nm] (same shape as the PSF/mask), added "
+             "high-order WFE map [nm], at its own native resolution, added "
              "to the model without being optimised. Ignored for "
              "gerchberg_saxton.",
     )
@@ -462,6 +500,9 @@ def main() -> None:
             "zernike_order": args.zernike_order,
             "orthogonal_basis": args.orthogonal_basis,
             "mask_binarize": args.mask_binarize,
+            "mask_native_aperture_px": args.mask_native_aperture_px,
+            "ho_native_aperture_px": args.ho_native_aperture_px,
+            "aperture_threshold": args.aperture_threshold,
             "max_iter": args.max_iter,
             "beta": args.beta,
             "seed": args.seed,
@@ -498,6 +539,9 @@ def main() -> None:
         zernike_order=proc_param["zernike_order"],
         orthogonal_basis=proc_param["orthogonal_basis"],
         mask_binarize=proc_param["mask_binarize"],
+        mask_native_aperture_px=proc_param["mask_native_aperture_px"],
+        ho_native_aperture_px=proc_param["ho_native_aperture_px"],
+        aperture_threshold=proc_param["aperture_threshold"],
         max_iter=proc_param["max_iter"],
         beta=proc_param["beta"],
         seed=proc_param["seed"],

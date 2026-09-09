@@ -133,6 +133,21 @@
           invariance de `N_pup_target` au suréchantillonnage cohérent,
           masque/carte HO à des résolutions natives différentes l'une de
           l'autre et de la PSF, bout en bout via `psf_to_wfe`.
+    -   **Masque/carte HO plus grand que l'ouverture** (marge de zéros
+        autour, fichier non cadré exactement sur l'ouverture) —
+        REFERENCE_TECHNIQUE.md §12.3 : nouveaux `mask_native_aperture_px`/
+        `ho_native_aperture_px` (`psf_to_wfe`/`load_and_prepare_mask`/
+        `load_and_prepare_ho_wfe`/CLI) pour indiquer explicitement le
+        nombre de pixels qu'occupe l'ouverture dans le fichier source ;
+        par défaut, auto-détection de sa boîte englobante
+        (`aperture_threshold=0.01` par défaut, fraction du maximum du
+        fichier) — sans effet quand l'ouverture remplit déjà tout le
+        fichier. Avant ce correctif, une telle marge était comprimée avec
+        l'ouverture dans `N_pup_target` au lieu d'être ignorée, rendant
+        l'ouverture reconstruite artificiellement plus petite. 4 tests
+        dédiés (`tests/test_multi_resolution.py`), dont un bout en bout
+        avec masque *et* carte HO chacun sur un cadre plus grand que leur
+        ouverture, à des tailles de marge différentes entre les deux.
 
 ## Évolutions futures
 

@@ -53,7 +53,9 @@ laquelle choisir selon le cas d'usage.
 
 Masque, carte de WFE haut ordre (`known_ho_wfe_path`) et PSF peuvent
 chacun venir d'une résolution native différente — y compris une PSF
-suréchantillonnée par super-résolution (`oversampling=`) : voir
+suréchantillonnée par super-résolution (`oversampling=`), ou un fichier
+masque/carte plus grand que l'ouverture elle-même (marge de zéros autour,
+`mask_native_aperture_px=`/`ho_native_aperture_px=`) : voir
 [REFERENCE_TECHNIQUE.md](REFERENCE_TECHNIQUE.md) §12.
 
 Ligne de commande équivalente :

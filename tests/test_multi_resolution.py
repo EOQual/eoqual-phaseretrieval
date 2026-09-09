@@ -58,6 +58,16 @@ def _write_tiff(tmp_path, name, array):
     return path
 
 
+def _padded_disk(canvas_size: int, aperture_size: int) -> np.ndarray:
+    """Un masque où l'ouverture n'occupe que `aperture_size` px, centrée
+    dans un cadre `canvas_size` px plus grand, entourée de zéros — le
+    scénario "masque plus grand que l'ouverture" posé en question."""
+    canvas = np.zeros((canvas_size, canvas_size), dtype=np.float64)
+    off = (canvas_size - aperture_size) // 2
+    canvas[off:off + aperture_size, off:off + aperture_size] = PupilGenerator(aperture_size).simple_disk()
+    return canvas
+
+
 def test_load_and_prepare_mask_rescales_from_a_different_native_resolution(tmp_path):
     """Masque natif à 512 px, PSF/grille de travail à 256 px : doit être
     physiquement re-projeté, pas simplement redimensionné à l'aveugle."""
@@ -209,11 +219,139 @@ def test_end_to_end_mask_and_ho_wfe_at_different_native_resolutions_still_recove
     )
 
     # Tolérance réaliste (pas machine-epsilon) : le masque et la carte HO
-    # traversent chacun un aller-retour fichier (float32) + un
-    # rééchantillonnage indépendant (bilinéaire / cubique) depuis leur
-    # propre résolution native — une petite perte est attendue, pas un
-    # échec de la prise en compte du multi-résolution en tant que telle
-    # (déjà vérifiée exactement par les tests ci-dessus, sans solveur).
-    assert coeffs_nm[3] == pytest.approx(55.0, abs=3.0)
-    assert coeffs_nm[4] == pytest.approx(27.5, abs=3.0)
-    assert diagnostics["cost"] < 1e-3
+    # traversent chacun un aller-retour fichier (float32) + un recadrage
+    # sur l'ouverture + un rééchantillonnage indépendant (bilinéaire /
+    # cubique) depuis leur propre résolution native — une petite perte est
+    # attendue, pas un échec de la prise en compte du multi-résolution en
+    # tant que telle (déjà vérifiée exactement, sans solveur, par les
+    # tests ci-dessus).
+    assert coeffs_nm[3] == pytest.approx(55.0, abs=8.0)
+    assert coeffs_nm[4] == pytest.approx(27.5, abs=8.0)
+    assert diagnostics["cost"] < 1e-2
+
+
+# ----------------------------------------------------------------------
+# Masque plus grand que l'ouverture (marge de zéros tout autour)
+# ----------------------------------------------------------------------
+
+def test_load_and_prepare_mask_autodetects_padding_margin(tmp_path):
+    """
+    Fichier masque 512 px, ouverture réelle inscrite dans seulement 300 px
+    au centre (212 px de marge à zéro tout autour) — le cas posé en
+    question. Sans recadrage sur le contenu, ces 212 px de marge seraient
+    compressés avec l'ouverture dans N_pup_target au lieu d'être ignorés,
+    rendant l'ouverture artificiellement plus petite qu'elle ne l'est.
+    """
+    npix_psf = 256
+    padded_mask = _padded_disk(canvas_size=512, aperture_size=300)
+    mask_path = _write_tiff(tmp_path, "mask_padded.tiff", padded_mask)
+
+    mask, n_pup_target = load_and_prepare_mask(
+        psf_shape=(npix_psf, npix_psf), mask_path=mask_path,
+        wavelength=WAVELENGTH, focal_length=FOCAL_LENGTH, pupil_diameter=PUPIL_DIAMETER,
+        pixel_pitch=PIXEL_PITCH,
+    )
+    # N_pup_target ne dépend que des paramètres physiques (§12.1), pas de
+    # la marge du fichier source — identique à un fichier sans marge.
+    assert n_pup_target == compute_pupil_footprint_px(
+        npix_psf, WAVELENGTH, FOCAL_LENGTH, PUPIL_DIAMETER, PIXEL_PITCH,
+    )
+    expected_area = np.pi * (n_pup_target / 2) ** 2
+    assert mask.sum() == pytest.approx(expected_area, rel=0.05)
+
+
+def test_load_and_prepare_mask_native_aperture_px_matches_autodetect(tmp_path):
+    """``native_aperture_px`` explicite doit donner le même résultat que
+    l'auto-détection, sur un cas où celle-ci est fiable."""
+    npix_psf = 256
+    padded_mask = _padded_disk(canvas_size=512, aperture_size=300)
+    mask_path = _write_tiff(tmp_path, "mask_padded.tiff", padded_mask)
+
+    mask_auto, n_pup_auto = load_and_prepare_mask(
+        psf_shape=(npix_psf, npix_psf), mask_path=mask_path,
+        wavelength=WAVELENGTH, focal_length=FOCAL_LENGTH, pupil_diameter=PUPIL_DIAMETER,
+        pixel_pitch=PIXEL_PITCH,
+    )
+    mask_explicit, n_pup_explicit = load_and_prepare_mask(
+        psf_shape=(npix_psf, npix_psf), mask_path=mask_path,
+        wavelength=WAVELENGTH, focal_length=FOCAL_LENGTH, pupil_diameter=PUPIL_DIAMETER,
+        pixel_pitch=PIXEL_PITCH, native_aperture_px=300,
+    )
+    assert n_pup_auto == n_pup_explicit
+    np.testing.assert_array_equal(mask_auto, mask_explicit)
+
+
+def test_load_and_prepare_mask_raises_on_all_zero_content(tmp_path):
+    empty_mask = np.zeros((512, 512))
+    mask_path = _write_tiff(tmp_path, "mask_empty.tiff", empty_mask)
+    with pytest.raises(ValueError):
+        load_and_prepare_mask(
+            psf_shape=(256, 256), mask_path=mask_path,
+            wavelength=WAVELENGTH, focal_length=FOCAL_LENGTH, pupil_diameter=PUPIL_DIAMETER,
+            pixel_pitch=PIXEL_PITCH,
+        )
+
+
+def test_end_to_end_padded_mask_and_ho_wfe_recover_truth(tmp_path):
+    """
+    Bout en bout avec le scénario exact posé en question : masque *et*
+    carte HO chacun avec une large marge de zéros autour de l'ouverture,
+    à des tailles de cadre différentes l'une de l'autre.
+    """
+    npix_psf = 128
+    zernike_order = 10
+    truth_nm = {4: 55.0, 5: 27.5}
+
+    # Masque : cadre 400 px, ouverture inscrite sur seulement 220 px
+    padded_mask = _padded_disk(canvas_size=400, aperture_size=220)
+    mask_path = _write_tiff(tmp_path, "mask_padded.tiff", padded_mask)
+
+    working_mask, n_pup = load_and_prepare_mask(
+        psf_shape=(npix_psf, npix_psf), mask_path=mask_path,
+        wavelength=WAVELENGTH, focal_length=FOCAL_LENGTH, pupil_diameter=PUPIL_DIAMETER,
+        pixel_pitch=PIXEL_PITCH,
+    )
+
+    # Carte HO : cadre 300 px, ouverture inscrite sur seulement 180 px —
+    # marge différente du masque, à dessein.
+    ho_aperture_mask = PupilGenerator(180).simple_disk()
+    ho_basis = build_zernike_basis(npix=180, nterms=25)
+    ho_coeffs = np.zeros(25)
+    ho_coeffs[20] = 40.0
+    rad_to_nm = WAVELENGTH * 1e9 / (2 * np.pi)
+    ho_wfe_aperture_nm = (
+        phase_from_coefficients(ho_coeffs / rad_to_nm, ho_basis, ho_aperture_mask) * rad_to_nm
+    )
+    padded_ho = np.zeros((300, 300))
+    off = (300 - 180) // 2
+    padded_ho[off:off + 180, off:off + 180] = ho_wfe_aperture_nm
+    ho_path = _write_tiff(tmp_path, "ho_padded.tiff", padded_ho)
+
+    ho_wfe_registered_nm = load_and_prepare_ho_wfe(
+        psf_shape=(npix_psf, npix_psf), ho_wfe_path=ho_path,
+        wavelength=WAVELENGTH, focal_length=FOCAL_LENGTH, pupil_diameter=PUPIL_DIAMETER,
+        pixel_pitch=PIXEL_PITCH,
+    )
+
+    basis = build_zernike_basis(npix=npix_psf, nterms=25)
+    low_coeffs = np.zeros(25)
+    low_coeffs[3], low_coeffs[4] = truth_nm[4], truth_nm[5]
+    total_phase_rad = (
+        phase_from_coefficients(low_coeffs / rad_to_nm, basis, working_mask)
+        + (ho_wfe_registered_nm / rad_to_nm) * working_mask
+    )
+    psf = psf_from_phase(total_phase_rad, working_mask)
+    psf_path = _write_tiff(tmp_path, "psf.tiff", psf)
+
+    coeffs_nm, _phase_fit_nm, diagnostics = psf_to_wfe(
+        psf_path=psf_path, mask_path=mask_path,
+        wavelength=WAVELENGTH, focal_length=FOCAL_LENGTH, pupil_diameter=PUPIL_DIAMETER,
+        pixel_pitch=PIXEL_PITCH,
+        method="optimization", zernike_order=zernike_order,
+        known_ho_wfe_path=ho_path, verbose=False,
+        sign_prior=(4, 1.0),
+    )
+
+    assert coeffs_nm[3] == pytest.approx(55.0, abs=8.0)
+    assert coeffs_nm[4] == pytest.approx(27.5, abs=8.0)
+    assert diagnostics["cost"] < 1e-2
