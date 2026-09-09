@@ -27,7 +27,7 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.optimize import least_squares
 
-from ..optics import phase_from_coefficients, psf_from_phase
+from ..optics import phase_from_coefficients, psf_from_phase, wfe_map_to_phase
 from ..zernike_basis_orthogonal import resolve_zernike_basis
 
 
@@ -74,6 +74,15 @@ class PhaseDiversityConfig:
         ``REFERENCE_TECHNIQUE.md``) instead of the standard Noll basis —
         recommended for an obstructed pupil (central obstruction,
         spiders). ``False`` (default) keeps the historical behaviour.
+    known_ho_wfe_nm : NDArray, optional
+        Known, **fixed** wavefront-error map [nm] — typically a high-order
+        (HO) contribution beyond ``zernike_order``, measured independently
+        — added to the fitted low-order phase in **both** channels (focus
+        and defocus): it is a static contribution of the optics, present
+        regardless of the diversity term (see §11.3 of
+        ``REFERENCE_TECHNIQUE.md``). Same shape as the PSF/mask. Never
+        optimised, exactly like ``defocus`` itself. ``None`` (default)
+        disables it, reproducing the original model.
     """
     wavelength: float = 550e-9
     zernike_order: int = 36
@@ -84,6 +93,7 @@ class PhaseDiversityConfig:
     max_nfev: Optional[int] = None
     verbose: bool = True
     orthogonal_basis: bool = False
+    known_ho_wfe_nm: Optional[NDArray[np.float64]] = None
 
 
 def build_roi_mask(shape: Tuple[int, int], radius: int) -> NDArray[np.bool_]:
@@ -208,6 +218,8 @@ def residuals(
     coeffs[3:] = active_coeffs
 
     phase = phase_from_coefficients(coeffs, basis, mask)
+    if cfg.known_ho_wfe_nm is not None:
+        phase = phase + wfe_map_to_phase(cfg.known_ho_wfe_nm, cfg.wavelength, mask)
 
     psf_model_focus = psf_from_phase(phase, mask)
 
@@ -282,6 +294,8 @@ def fit_phase_diversity(
     coeffs_nm = coeffs_rad * rad_to_nm
 
     phase = phase_from_coefficients(coeffs_rad, basis, mask)
+    if cfg.known_ho_wfe_nm is not None:
+        phase = phase + wfe_map_to_phase(cfg.known_ho_wfe_nm, cfg.wavelength, mask)
     diversity = diversity_phase(basis, cfg.defocus, cfg.wavelength)
     model_focus = psf_from_phase(phase, mask)
     model_defocus = psf_from_phase(phase + diversity, mask)

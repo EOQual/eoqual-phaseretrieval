@@ -51,6 +51,20 @@
         standard (Z4 = défocus, …) pour l'interprétation — conversion
         linéaire exacte (aux erreurs de conditionnement/convergence en
         amont près), voir REFERENCE_TECHNIQUE.md §10.2.
+    -   Option `known_ho_wfe_nm` (`OpticalConfig`, `PhaseDiversityConfig`,
+        `psf_to_wfe(..., known_ho_wfe_path=...)`/`--known_ho_wfe` en CLI) :
+        incorpore une carte de WFE haut ordre (HO) connue, mesurée
+        indépendamment, au modèle direct — additive en phase (nouvelle
+        fonction `optics.wfe_map_to_phase`), jamais optimisée, dans les
+        deux méthodes basées optimisation (pour `"phase_diversity"`,
+        ajoutée aux deux canaux focus/défocus). Débiaise les coefficients
+        bas ordre estimés d'une contribution HO non modélisée par ailleurs
+        (voir REFERENCE_TECHNIQUE.md §11.3) — vérifié empiriquement
+        (`tests/test_known_ho_wfe.py`) : sans la carte, un $Z_{21}$ connu
+        de 40 nm biaise $Z_4$ de plus de 20 nm ; avec, la vérité est
+        recouvrée exactement. Ignorée (avec avertissement) pour
+        `"gerchberg_saxton"`. `eoqual.phaseretrieval.simulation` accepte le
+        même paramètre pour générer des cas de test correspondants.
 
 ## Évolutions futures
 

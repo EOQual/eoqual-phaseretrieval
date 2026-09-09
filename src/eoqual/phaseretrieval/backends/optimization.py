@@ -18,7 +18,7 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.optimize import least_squares
 
-from ..optics import phase_from_coefficients, psf_from_phase
+from ..optics import phase_from_coefficients, psf_from_phase, wfe_map_to_phase
 from ..zernike_basis_orthogonal import resolve_zernike_basis
 
 
@@ -57,6 +57,17 @@ class OpticalConfig:
         ``REFERENCE_TECHNIQUE.md``) instead of the standard Noll basis —
         recommended for an obstructed pupil (central obstruction,
         spiders). ``False`` (default) keeps the historical behaviour.
+    known_ho_wfe_nm : NDArray, optional
+        Known, **fixed** wavefront-error map [nm] — typically a high-order
+        (HO) contribution beyond ``zernike_order``, measured independently
+        (interferogram, as-built optical model, ground calibration) —
+        added to the fitted low-order phase before computing the model PSF
+        (see §11.3 of ``REFERENCE_TECHNIQUE.md``). Same shape as the PSF/
+        mask. Never optimised: only the Zernike coefficients up to
+        ``zernike_order`` remain free parameters, exactly as if this
+        contribution were absent from the pupil altogether — the point is
+        to stop it from silently biasing those low-order coefficients.
+        ``None`` (default) disables it, reproducing the original model.
     """
     wavelength: float = 550e-9
     zernike_order: int = 36
@@ -66,6 +77,7 @@ class OpticalConfig:
     core_weight_radius: Optional[float] = None
     l2_reg: float = 0.0
     orthogonal_basis: bool = False
+    known_ho_wfe_nm: Optional[NDArray[np.float64]] = None
 
 
 def _core_weight(shape: Tuple[int, int], radius: float) -> NDArray[np.float64]:
@@ -98,6 +110,7 @@ def residuals(
     mask: NDArray[np.float64],
     *,
     weight: Optional[NDArray[np.float64]] = None,
+    known_phase_rad: Optional[NDArray[np.float64]] = None,
 ) -> NDArray[np.float64]:
     """
     Least-squares residuals between a simulated and a measured PSF.
@@ -118,6 +131,10 @@ def residuals(
         ``sqrt(weight)`` to keep the weighted sum of squares equal to
         ``sum(weight * (model - measured) ** 2)``. ``None`` weights every
         pixel equally (original behaviour).
+    known_phase_rad : NDArray, optional
+        Known, fixed phase contribution [rad] added to the modelled phase
+        before computing the PSF (see ``OpticalConfig.known_ho_wfe_nm``).
+        ``None`` (default) adds nothing, reproducing the original model.
 
     Returns
     -------
@@ -125,6 +142,8 @@ def residuals(
         Flattened residual vector (amplitude domain: ``sqrt`` of the PSF).
     """
     phase = phase_from_coefficients(coeffs_rad, basis, mask)
+    if known_phase_rad is not None:
+        phase = phase + known_phase_rad
     model_psf = psf_from_phase(phase, mask)
 
     residual = np.sqrt(model_psf) - np.sqrt(measured_psf)
@@ -164,6 +183,10 @@ def fit_zernike_from_psf(
         orthogonalize=cfg.orthogonal_basis,
     )
 
+    known_phase_rad = None
+    if cfg.known_ho_wfe_nm is not None:
+        known_phase_rad = wfe_map_to_phase(cfg.known_ho_wfe_nm, cfg.wavelength, mask)
+
     if cfg.fit_piston_tilt:
         active = np.arange(cfg.zernike_order)
     else:
@@ -174,7 +197,7 @@ def fit_zernike_from_psf(
     def objective(x: NDArray[np.float64]) -> NDArray[np.float64]:
         coeffs = np.zeros(cfg.zernike_order)
         coeffs[active] = x
-        r = residuals(coeffs, psf, basis, mask, weight=weight)
+        r = residuals(coeffs, psf, basis, mask, weight=weight, known_phase_rad=known_phase_rad)
         if cfg.l2_reg > 0.0:
             # Tikhonov (L2) regularisation embedded as extra pseudo-residuals:
             # sum(r**2) + l2_reg*sum(x**2) == sum(r**2) + sum((sqrt(l2_reg)*x)**2)
@@ -195,7 +218,10 @@ def fit_zernike_from_psf(
     rad_to_nm = cfg.wavelength * 1e9 / (2 * np.pi)
     coeffs_nm = coeffs_rad * rad_to_nm
 
-    model_psf = psf_from_phase(phase_from_coefficients(coeffs_rad, basis, mask), mask)
+    model_phase = phase_from_coefficients(coeffs_rad, basis, mask)
+    if known_phase_rad is not None:
+        model_phase = model_phase + known_phase_rad
+    model_psf = psf_from_phase(model_phase, mask)
     psf_rmse = float(np.sqrt(np.mean((model_psf - psf) ** 2)))
 
     diagnostics = {

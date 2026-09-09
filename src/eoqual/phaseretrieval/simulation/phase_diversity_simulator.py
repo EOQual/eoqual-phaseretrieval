@@ -26,7 +26,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from ..backends.phase_diversity import diversity_phase
-from ..optics import phase_from_coefficients, psf_from_phase
+from ..optics import phase_from_coefficients, psf_from_phase, wfe_map_to_phase
 from ..pupil import PupilGenerator
 from ..zernike_basis_orthogonal import resolve_zernike_basis
 from .noise import DetectorNoiseConfig, apply_detector_noise
@@ -66,6 +66,13 @@ class PhaseDiversitySimulationConfig:
         une intensité) — seul un masque *non* centrosymétrique (bras
         d'araignée asymétriques) pourrait faire apparaître un léger
         tip-tilt parasite dans ce terme, non pris en compte ici.
+    known_ho_wfe_nm : NDArray, optional
+        Carte de WFE haut ordre (HO) [nm] ajoutée à la phase bas ordre
+        dans **les deux** canaux (focus et défocus) — une contribution
+        statique de l'optique, présente indépendamment du terme de
+        diversité (voir §11.3 de ``REFERENCE_TECHNIQUE.md``) — pour tester
+        ``PhaseDiversityConfig.known_ho_wfe_nm`` de bout en bout. ``None``
+        (défaut) : pas de contribution HO.
     """
 
     wavelength: float = 550e-9
@@ -74,6 +81,7 @@ class PhaseDiversitySimulationConfig:
     defocus: float = 275e-9
     noise: Optional[DetectorNoiseConfig] = None
     orthogonal_basis: bool = False
+    known_ho_wfe_nm: Optional[NDArray[np.float64]] = None
 
 
 def simulate_phase_diversity_pair(
@@ -118,13 +126,15 @@ def simulate_phase_diversity_pair(
           coefficients récupérés (ajustés avec le *même* réglage).
         - ``"defocus"``, ``"wavelength"`` : rappel des paramètres utilisés.
         - ``"orthogonal_basis"`` : rappel du réglage utilisé.
+        - ``"known_ho_wfe_nm"`` : rappel de la carte HO utilisée (ou ``None``).
 
     Raises
     ------
     ValueError
         Si ``cfg.orthogonal_basis=True`` et qu'au moins un mode d'indice ≤
         ``cfg.zernike_order`` est linéairement dépendant des précédents
-        sur ce masque — voir :func:`resolve_zernike_basis`.
+        sur ce masque — voir :func:`resolve_zernike_basis`. Ou si
+        ``cfg.known_ho_wfe_nm`` n'a pas la forme de ``mask``.
     """
     if mask is None:
         mask = PupilGenerator(cfg.npix).simple_disk()
@@ -137,6 +147,8 @@ def simulate_phase_diversity_pair(
         orthogonalize=cfg.orthogonal_basis,
     )
     phase_rad = phase_from_coefficients(coeffs_arr_nm / rad_to_nm, basis, mask)
+    if cfg.known_ho_wfe_nm is not None:
+        phase_rad = phase_rad + wfe_map_to_phase(cfg.known_ho_wfe_nm, cfg.wavelength, mask)
     diversity_rad = diversity_phase(basis, cfg.defocus, cfg.wavelength)
 
     psf_focus_truth = psf_from_phase(phase_rad, mask)
@@ -161,4 +173,5 @@ def simulate_phase_diversity_pair(
         "defocus": cfg.defocus,
         "wavelength": cfg.wavelength,
         "orthogonal_basis": cfg.orthogonal_basis,
+        "known_ho_wfe_nm": cfg.known_ho_wfe_nm,
     }

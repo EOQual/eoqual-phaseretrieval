@@ -78,6 +78,8 @@ def psf_to_wfe(
     poisson_weighting: bool = True,
     # --- Correction d'ambiguïté de signe (gerchberg_saxton / optimization) ---
     sign_prior: Optional[Tuple[int, float]] = None,
+    # --- WFE haut ordre connue (optimization / phase_diversity) ---
+    known_ho_wfe_path: Optional[Union[str, Path]] = None,
 ) -> Tuple[NDArray[np.float64], NDArray[np.float64], Dict[str, float]]:
     """
     End-to-end conversion **PSF -> Zernike (Noll) coefficients**.
@@ -141,6 +143,15 @@ def psf_to_wfe(
         (see :func:`zernike_fit.resolve_sign_ambiguity` for the theory and
         ``REFERENCE_TECHNIQUE.md`` §3.7). Ignored (with a warning)
         for ``"phase_diversity"``, which is already unambiguous.
+    known_ho_wfe_path : str or Path, optional
+        [optimization, phase_diversity] Path to a known, fixed high-order
+        (HO) WFE map [nm], same shape as the PSF/mask — measured
+        independently (interferogram, as-built optical model, ground
+        calibration). Added to the modelled phase without ever being
+        optimised, so it stops silently biasing the fitted low-order
+        coefficients (see §11.3 of ``REFERENCE_TECHNIQUE.md``). Ignored
+        (with a warning) for ``"gerchberg_saxton"``, whose iteration has
+        no low/high-order split to attach a fixed term to.
 
     Returns
     -------
@@ -167,6 +178,13 @@ def psf_to_wfe(
             "(only 'phase_diversity' uses a second PSF)."
         )
 
+    if known_ho_wfe_path is not None and method == "gerchberg_saxton":
+        logger.warning(
+            "known_ho_wfe_path is ignored by method='gerchberg_saxton' "
+            "(no low/high-order split to attach a fixed term to — see "
+            "REFERENCE_TECHNIQUE.md §11.3/§2.2)."
+        )
+
     # ------------------------------------------------------------------
     # Chargement PSF + masque (commun à toutes les méthodes)
     # ------------------------------------------------------------------
@@ -182,6 +200,15 @@ def psf_to_wfe(
         pupil_diameter=pupil_diameter,
         detector_size=detector_size,
     )
+
+    known_ho_wfe_nm: Optional[NDArray[np.float64]] = None
+    if known_ho_wfe_path is not None and method != "gerchberg_saxton":
+        known_ho_wfe_nm = load_image(known_ho_wfe_path)
+        if known_ho_wfe_nm.shape != mask.shape:
+            raise ValueError(
+                f"known_ho_wfe_path shape {known_ho_wfe_nm.shape} != "
+                f"mask shape {mask.shape}"
+            )
 
     rad_to_nm = wavelength * 1e9 / (2.0 * np.pi)
     phase_nm: Optional[NDArray[np.float64]] = None
@@ -207,6 +234,7 @@ def psf_to_wfe(
             max_nfev=max_nfev,
             verbose=verbose,
             orthogonal_basis=orthogonal_basis,
+            known_ho_wfe_nm=known_ho_wfe_nm,
         )
         coeffs_nm, diagnostics = fit_zernike_from_psf(psf, mask, opt_cfg)
 
@@ -234,6 +262,7 @@ def psf_to_wfe(
             max_nfev=max_nfev,
             verbose=verbose,
             orthogonal_basis=orthogonal_basis,
+            known_ho_wfe_nm=known_ho_wfe_nm,
         )
         coeffs_nm, diagnostics = fit_phase_diversity(psf, psf_defocus, mask, pd_cfg)
 
@@ -336,6 +365,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--sign_prior_sign", type=float, default=1.0,
         help="[gerchberg_saxton, optimization] Expected sign (+1 or -1) of --sign_prior_index.",
     )
+    parser.add_argument(
+        "--known_ho_wfe", type=Path, default=None,
+        help="[optimization, phase_diversity] Path to a known, fixed "
+             "high-order WFE map [nm] (same shape as the PSF/mask), added "
+             "to the model without being optimised. Ignored for "
+             "gerchberg_saxton.",
+    )
     parser.add_argument("--config_json", type=Path, default=None, help="Optionnel: fichier JSON de config")
 
     return parser
@@ -393,6 +429,7 @@ def main() -> None:
             "poisson_weighting": args.poisson_weighting,
             "sign_prior_index": args.sign_prior_index,
             "sign_prior_sign": args.sign_prior_sign,
+            "known_ho_wfe": str(args.known_ho_wfe) if args.known_ho_wfe else None,
         }
 
     out_root = Path(proc_param["output"])
@@ -428,6 +465,7 @@ def main() -> None:
             (proc_param["sign_prior_index"], proc_param["sign_prior_sign"])
             if proc_param["sign_prior_index"] is not None else None
         ),
+        known_ho_wfe_path=proc_param["known_ho_wfe"],
         verbose=True,
     )
 

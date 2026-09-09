@@ -979,45 +979,58 @@ de ne pas biaiser $Z_4, Z_5, Z_6$.
 
 ### 11.3 Statut
 
-Rien de cette section n'est implémenté dans ce projet à ce stade — c'est
-une piste d'extension, pas une capacité actuelle. Deux cas bien différents
-selon ce dont on dispose réellement sur le WFE haut ordre (HO) :
+Deux cas bien différents selon ce dont on dispose réellement sur le WFE
+haut ordre (HO) — seul le premier est implémenté à ce stade :
 
 - **Carte de phase HO connue** (mesurée indépendamment — interférogramme,
-  as-built optique, calibration sol) : l'intégration est **directe et
-  déterministe**, sans passer par l'OTF. La carte HO connue s'ajoute
-  simplement, point à point en radians, à la phase bas ordre *avant* le
-  calcul de la PSF — exactement le même principe que
+  as-built optique, calibration sol) : **implémenté**, via
+  `known_ho_wfe_nm` (une carte de WFE `[nm]`, même forme que le masque)
+  sur `OpticalConfig`/`PhaseDiversityConfig`, ou `psf_to_wfe(...,
+  known_ho_wfe_path=...)`/`--known_ho_wfe` en CLI (chemin vers une image,
+  chargée comme la PSF/le masque). L'intégration est **directe et
+  déterministe**, sans passer par l'OTF : la carte connue s'ajoute
+  simplement, point à point en radians (conversion via
+  `optics.wfe_map_to_phase`), à la phase bas ordre *avant* le calcul de la
+  PSF — exactement le même principe que
   `backends.phase_diversity.diversity_phase`, qui ajoute déjà un terme de
   phase connu (le défocus de diversité) sans le faire dépendre du
   solveur :
 
   ```python
   phase_low_order = phase_from_coefficients(coeffs_rad, basis, mask)  # paramètres libres
-  phase_total = phase_low_order + phase_ho_known_rad                  # terme fixe, non ajusté
+  phase_total = phase_low_order + wfe_map_to_phase(known_ho_wfe_nm, wavelength, mask)  # terme fixe
   model_psf = psf_from_phase(phase_total, mask)
   ```
 
-  Pour `"optimization"`/`"phase_diversity"`, c'est un ajout ponctuel dans
-  `residuals()`/`fit_...()` (un paramètre `known_phase_rad: NDArray` de
-  plus, jamais optimisé) — la structure de l'optimisation ne change pas,
-  seuls les bas ordres restent des paramètres libres, ce qui est
-  précisément ce qui limite le biais évoqué en §11.2 (« ne pas biaiser
-  $Z_4, Z_5, Z_6$ »). Moins naturel pour `"gerchberg_saxton"`, qui ne
+  Pour `"phase_diversity"`, la carte HO est ajoutée dans **les deux**
+  canaux (focus et défocus) : c'est une contribution statique de
+  l'optique, présente indépendamment du terme de diversité lui-même.
+  Dans les deux méthodes, seuls les bas ordres restent des paramètres
+  libres — c'est précisément ce qui limite le biais évoqué en §11.2
+  (« ne pas biaiser $Z_4, Z_5, Z_6$ »), vérifié empiriquement
+  (`tests/test_known_ho_wfe.py`) : sans la carte HO, un mode $Z_{21}$
+  connu de 40 nm biaise $Z_4$ de plus de 20 nm (55 nm de vérité mesuré à
+  ~26–48 nm selon la méthode) ; avec la carte fournie, la vérité est
+  recouvrée exactement (coût du solveur ≈ 0). Non branché pour
+  `"gerchberg_saxton"` (avertissement, valeur ignorée) : l'algorithme ne
   paramètre pas sa phase par une base modale — il faudrait plutôt
   soustraire l'effet de la carte HO connue de l'amplitude mesurée avant
-  la boucle GS, une transformation plus invasive et non implémentée ici.
+  la boucle GS, une transformation plus invasive, non implémentée ici.
+  Le module de simulation (`simulate_psf_from_zernike`,
+  `PhaseDiversitySimulationConfig`) accepte le même paramètre pour générer
+  des cas de test réalistes.
 - **Seule la statistique (PSD) du HO est connue**, pas sa carte exacte
   (cas le plus courant en pratique — turbulence résiduelle, tolérances de
-  fabrication non mesurées individuellement) : c'est le cas visé par la
-  formule $\text{OTF}_{\text{HO}}\approx\exp[-\tfrac12 D_\phi(\lambda f)]$
-  de §11.1. Ici, pas de carte à ajouter en phase : on multiplie,
+  fabrication non mesurées individuellement) : **non implémenté**. C'est
+  le cas visé par la formule
+  $\text{OTF}_{\text{HO}}\approx\exp[-\tfrac12 D_\phi(\lambda f)]$
+  de §11.1. Ici, pas de carte à ajouter en phase : il faudrait multiplier,
   point à point en fréquence, l'OTF optique déjà calculée par
   `optics.psf_from_phase` (en passant par sa transformée de Fourier) par
   ce terme statistique, avant de revenir en PSF par FFT inverse — sans
   toucher au reste du modèle d'optimisation (§6.3). Cette approche est
   plus approximative (un effet *moyen*, pas la vraie carte) mais
-  s'applique quand la seconde option ci-dessus n'est pas disponible.
+  s'appliquerait quand la carte exacte ci-dessus n'est pas disponible.
 
 ---
 

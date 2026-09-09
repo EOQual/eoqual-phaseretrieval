@@ -40,7 +40,12 @@ __copyright__ = "Copyright (c) 2026 Olivier Amram"
 
 from .config import METHODS_CONFIGS  # noqa: F401
 
-from .optics import build_zernike_basis, phase_from_coefficients, psf_from_phase  # noqa: F401
+from .optics import (  # noqa: F401
+    build_zernike_basis,
+    phase_from_coefficients,
+    psf_from_phase,
+    wfe_map_to_phase,
+)
 from .zernike_fit import (  # noqa: F401
     ZernikeConfig,
     fit_zernike,
@@ -73,6 +78,7 @@ __all__ = [
     "build_zernike_basis",
     "phase_from_coefficients",
     "psf_from_phase",
+    "wfe_map_to_phase",
     "ZernikeConfig",
     "fit_zernike",
     "project_orthogonal_to_standard",

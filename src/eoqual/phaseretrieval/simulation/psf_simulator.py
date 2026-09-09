@@ -19,7 +19,7 @@ from typing import Dict, Optional, Union
 import numpy as np
 from numpy.typing import NDArray
 
-from ..optics import phase_from_coefficients, psf_from_phase
+from ..optics import phase_from_coefficients, psf_from_phase, wfe_map_to_phase
 from ..pupil import PupilGenerator
 from ..zernike_basis_orthogonal import resolve_zernike_basis
 from .noise import DetectorNoiseConfig, apply_detector_noise
@@ -81,6 +81,7 @@ def simulate_psf_from_zernike(
     mask: Optional[NDArray[np.float64]] = None,
     noise: Optional[DetectorNoiseConfig] = None,
     orthogonal_basis: bool = False,
+    known_ho_wfe_nm: Optional[NDArray[np.float64]] = None,
 ) -> Dict[str, object]:
     """
     Simule une PSF diffraction-limitée avec une aberration de Zernike
@@ -123,6 +124,18 @@ def simulate_psf_from_zernike(
         :func:`eoqual.phaseretrieval.zernike_fit.project_orthogonal_to_standard`
         pour reconvertir des coefficients Gram-Schmidt vers la base
         standard après coup).
+    known_ho_wfe_nm : NDArray, optional
+        Carte de WFE haut ordre (HO) [nm], forme ``(npix, npix)``, ajoutée
+        à la phase bas ordre avant le calcul de la PSF — simule une
+        aberration réelle non capturée par ``zernike_order`` (voir §11.3
+        de ``REFERENCE_TECHNIQUE.md``), pour tester
+        ``OpticalConfig.known_ho_wfe_nm`` /
+        ``PhaseDiversityConfig.known_ho_wfe_nm`` de bout en bout : fournir
+        la *même* carte à la simulation et à l'ajustement doit alors
+        recouvrer la vérité bas ordre exactement (voir
+        ``tests/test_known_ho_wfe.py``) ; ne pas la fournir à l'ajustement
+        montre au contraire le biais qu'elle introduit sur les coefficients
+        bas ordre. ``None`` (défaut) : pas de contribution HO.
 
     Returns
     -------
@@ -136,16 +149,20 @@ def simulate_psf_from_zernike(
           dense, longueur ``zernike_order``, dans la base choisie via
           ``orthogonal_basis``) — la vérité terrain à comparer aux
           coefficients récupérés (ajustés avec le *même* réglage
-          ``orthogonal_basis``).
+          ``orthogonal_basis``). N'inclut *pas* ``known_ho_wfe_nm``,
+          renvoyée séparément.
         - ``"wavelength"`` : longueur d'onde utilisée [m].
         - ``"orthogonal_basis"`` : rappel du réglage utilisé.
+        - ``"known_ho_wfe_nm"`` : rappel de la carte HO utilisée (ou ``None``).
 
     Raises
     ------
     ValueError
         Si ``orthogonal_basis=True`` et qu'au moins un mode d'indice ≤
         ``zernike_order`` est linéairement dépendant des précédents sur ce
-        masque — voir :func:`resolve_zernike_basis`.
+        masque — voir :func:`resolve_zernike_basis`. Ou si
+        ``known_ho_wfe_nm`` n'a pas la forme de ``mask`` — voir
+        :func:`eoqual.phaseretrieval.optics.wfe_map_to_phase`.
     """
     if mask is None:
         mask = PupilGenerator(npix).simple_disk()
@@ -157,6 +174,8 @@ def simulate_psf_from_zernike(
         npix=npix, nterms=zernike_order, mask=mask, orthogonalize=orthogonal_basis,
     )
     phase_rad = phase_from_coefficients(coeffs_arr_nm / rad_to_nm, basis, mask)
+    if known_ho_wfe_nm is not None:
+        phase_rad = phase_rad + wfe_map_to_phase(known_ho_wfe_nm, wavelength, mask)
     psf_truth = psf_from_phase(phase_rad, mask)
 
     psf = apply_detector_noise(psf_truth, noise) if noise is not None else psf_truth
@@ -168,4 +187,5 @@ def simulate_psf_from_zernike(
         "coeffs_nm": coeffs_arr_nm,
         "wavelength": wavelength,
         "orthogonal_basis": orthogonal_basis,
+        "known_ho_wfe_nm": known_ho_wfe_nm,
     }

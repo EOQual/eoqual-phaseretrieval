@@ -80,6 +80,14 @@ PSF (piston, tip-tilt, signe) et pourquoi la diversité de phase les lève.
 approches qui ne partagent pas le même modèle direct (ex. approches
 linéarisées OTF).
 
+**WFE haut ordre connue** : `known_ho_wfe_nm` (`OpticalConfig`,
+`PhaseDiversityConfig`) ou `psf_to_wfe(..., known_ho_wfe_path=...)` /
+`--known_ho_wfe` en CLI ajoutent une carte de WFE mesurée indépendamment
+(interférogramme, as-built, calibration sol) au modèle direct, sans jamais
+l'ajuster — évite qu'elle ne biaise silencieusement les coefficients bas
+ordre estimés. Voir [REFERENCE_TECHNIQUE.md](REFERENCE_TECHNIQUE.md) §11.3.
+Non applicable à `"gerchberg_saxton"` (ignoré, avec avertissement).
+
 ## Simulation
 
 `eoqual.phaseretrieval.simulation` est un sous-paquet **indépendant** des
@@ -116,9 +124,14 @@ et `zernike_fit.project_orthogonal_to_standard` reconvertit après coup des
 coefficients ajustés en base Gram-Schmidt vers la base standard (Z4 =
 défocus, …) pour l'interprétation.
 
-Voir `tests/test_simulation_roundtrip.py`/`tests/test_simulation_orthogonal.py`
-pour des exemples complets (simulation → récupération de phase →
-comparaison à la vérité terrain) et
+`known_ho_wfe_nm` (même clé côté `simulate_psf_from_zernike`/
+`PhaseDiversitySimulationConfig`) permet aussi de simuler une carte de WFE
+haut ordre connue, pour valider `known_ho_wfe_nm` côté récupération de
+phase de bout en bout (`tests/test_known_ho_wfe.py`).
+
+Voir `tests/test_simulation_roundtrip.py`/`tests/test_simulation_orthogonal.py`/
+`tests/test_known_ho_wfe.py` pour des exemples complets (simulation →
+récupération de phase → comparaison à la vérité terrain) et
 [REFERENCE_TECHNIQUE.md](REFERENCE_TECHNIQUE.md) §6.4/§9 pour la
 discussion du modèle de bruit.
 

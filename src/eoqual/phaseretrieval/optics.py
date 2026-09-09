@@ -60,6 +60,52 @@ def phase_from_coefficients(
     return phase * mask
 
 
+def wfe_map_to_phase(
+    wfe_nm: NDArray[np.float64],
+    wavelength: float,
+    mask: NDArray[np.float64],
+) -> NDArray[np.float64]:
+    """
+    Convert a WFE map [nm] to a pupil phase map [rad], restricted to the
+    pupil.
+
+    Used to inject a **known, fixed** wavefront-error contribution into the
+    direct model — typically a high-order (HO) map beyond the fitted
+    ``zernike_order``, measured independently (see ``known_ho_wfe_nm`` on
+    :class:`backends.optimization.OpticalConfig` and
+    :class:`backends.phase_diversity.PhaseDiversityConfig`, and §11.3 of
+    ``REFERENCE_TECHNIQUE.md``). Unlike :func:`phase_from_coefficients`,
+    the input here is already a pixel map, not a set of modal coefficients
+    — no Zernike basis involved, so any spatial pattern (not just a finite
+    sum of Zernike modes) can be supplied.
+
+    Parameters
+    ----------
+    wfe_nm : NDArray
+        Wavefront-error map [nm], same shape as ``mask``.
+    wavelength : float
+        Wavelength [m], used for the nm -> rad conversion.
+    mask : NDArray
+        Binary pupil mask, shape ``(npix, npix)``.
+
+    Returns
+    -------
+    NDArray
+        Phase map [rad], restricted to the pupil.
+
+    Raises
+    ------
+    ValueError
+        If ``wfe_nm`` and ``mask`` shapes differ.
+    """
+    if wfe_nm.shape != mask.shape:
+        raise ValueError(
+            f"wfe_nm shape {wfe_nm.shape} != mask shape {mask.shape}"
+        )
+    rad_per_nm = (2.0 * np.pi) / (wavelength * 1e9)
+    return wfe_nm * rad_per_nm * mask
+
+
 def psf_from_phase(
     phase_rad: NDArray[np.float64],
     mask: NDArray[np.float64],
