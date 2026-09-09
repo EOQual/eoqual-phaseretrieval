@@ -66,6 +66,8 @@ def psf_to_wfe(
     mask_binarize: bool = True,
     mask_native_aperture_px: Optional[int] = None,
     ho_native_aperture_px: Optional[int] = None,
+    mask_native_aperture_center: Optional[Tuple[int, int]] = None,
+    ho_native_aperture_center: Optional[Tuple[int, int]] = None,
     aperture_threshold: float = 0.01,
     verbose: bool = True,
     # --- Gerchberg-Saxton ---
@@ -143,6 +145,13 @@ def psf_to_wfe(
         aperture already fills the file. Only relevant on the
         physical-rescale path (source shape different from the PSF's);
         see §12.3 of ``REFERENCE_TECHNIQUE.md``.
+    mask_native_aperture_center, ho_native_aperture_center : tuple of (int, int), optional
+        Only used when the matching ``*_native_aperture_px`` is given:
+        ``(row, col)`` pixel coordinates of the aperture's centre within
+        the source file, if it is **not** centred there (unequal margins
+        on opposite sides). ``None`` (default): assume it *is* centred.
+        Auto-detection (``*_native_aperture_px=None``) locates an
+        off-centre aperture on its own already, no need for this.
     aperture_threshold : float, default 0.01
         Fraction of the source file's own maximum value above which a
         pixel counts as part of the aperture, for the auto-detection
@@ -246,6 +255,7 @@ def psf_to_wfe(
         oversampling=oversampling,
         binarize=mask_binarize,
         native_aperture_px=mask_native_aperture_px,
+        native_aperture_center=mask_native_aperture_center,
         aperture_threshold=aperture_threshold,
     )
 
@@ -260,6 +270,7 @@ def psf_to_wfe(
             pixel_pitch=pixel_pitch,
             oversampling=oversampling,
             native_aperture_px=ho_native_aperture_px,
+            native_aperture_center=ho_native_aperture_center,
             aperture_threshold=aperture_threshold,
         )
 
@@ -408,6 +419,19 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Same as --mask_native_aperture_px, for --known_ho_wfe.",
     )
     parser.add_argument(
+        "--mask_native_aperture_center", type=int, nargs=2, default=None,
+        metavar=("ROW", "COL"),
+        help="Pixel coordinates of the aperture's centre within --mask, only "
+             "if --mask_native_aperture_px is given and the aperture is NOT "
+             "centred in the file (default: assume it is centred).",
+    )
+    parser.add_argument(
+        "--ho_native_aperture_center", type=int, nargs=2, default=None,
+        metavar=("ROW", "COL"),
+        help="Same as --mask_native_aperture_center, for --known_ho_wfe / "
+             "--ho_native_aperture_px.",
+    )
+    parser.add_argument(
         "--aperture_threshold", type=float, default=0.01,
         help="Fraction of the mask's/HO map's own maximum value above which a "
              "pixel counts as part of the aperture, for auto-detecting its "
@@ -502,6 +526,12 @@ def main() -> None:
             "mask_binarize": args.mask_binarize,
             "mask_native_aperture_px": args.mask_native_aperture_px,
             "ho_native_aperture_px": args.ho_native_aperture_px,
+            "mask_native_aperture_center": (
+                tuple(args.mask_native_aperture_center) if args.mask_native_aperture_center else None
+            ),
+            "ho_native_aperture_center": (
+                tuple(args.ho_native_aperture_center) if args.ho_native_aperture_center else None
+            ),
             "aperture_threshold": args.aperture_threshold,
             "max_iter": args.max_iter,
             "beta": args.beta,
@@ -541,6 +571,8 @@ def main() -> None:
         mask_binarize=proc_param["mask_binarize"],
         mask_native_aperture_px=proc_param["mask_native_aperture_px"],
         ho_native_aperture_px=proc_param["ho_native_aperture_px"],
+        mask_native_aperture_center=proc_param["mask_native_aperture_center"],
+        ho_native_aperture_center=proc_param["ho_native_aperture_center"],
         aperture_threshold=proc_param["aperture_threshold"],
         max_iter=proc_param["max_iter"],
         beta=proc_param["beta"],

@@ -1143,9 +1143,9 @@ la bonne). Deux façons de le piloter :
   dont certaines zones *à l'intérieur* de l'ouverture peuvent être
   légitimement proches de zéro (rien ne les distingue alors de la marge).
 - **`native_aperture_px`** : indique directement le nombre de pixels
-  qu'occupe l'ouverture dans le fichier source (centrée), quand cette
-  valeur est connue (documentée par l'outil qui a produit le fichier) —
-  plus robuste que l'auto-détection, en particulier pour une carte HO.
+  qu'occupe l'ouverture dans le fichier source, quand cette valeur est
+  connue (documentée par l'outil qui a produit le fichier) — plus robuste
+  que l'auto-détection, en particulier pour une carte HO.
 
 ```python
 coeffs_nm, phase_fit_nm, diagnostics = psf_to_wfe(
@@ -1166,13 +1166,36 @@ bout en bout avec masque *et* carte HO chacun sur un cadre plus grand que
 leur ouverture (tailles de marge différentes entre les deux) recouvre la
 vérité de Zernike.
 
+**Ouverture centrée ou non ?** `native_aperture_px` **seul** suppose
+l'ouverture **centrée** dans le fichier (même marge des deux côtés, sur
+les deux axes) : `r0 = (hauteur_fichier - taille_ouverture) // 2`, et
+pareil en colonne. Si ce n'est pas le cas (ouverture décalée dans le
+fichier source), deux options :
+- Ne **pas** fournir `native_aperture_px` : l'auto-détection localise déjà
+  l'ouverture où qu'elle soit dans le fichier, centrée ou non — c'est en
+  fait le cas normal pour une ouverture décentrée, aucun paramètre
+  supplémentaire n'est nécessaire.
+- Fournir en plus `native_aperture_center=(row, col)` (`--mask_native_aperture_center
+  ROW COL` / `--ho_native_aperture_center ROW COL` en CLI) : les
+  coordonnées pixel du centre réel de l'ouverture dans le fichier —
+  utile quand cette position est connue précisément et qu'on préfère
+  éviter l'auto-détection (même raison que pour `native_aperture_px` :
+  robustesse pour une carte HO, dont l'intérieur peut être proche de zéro
+  par endroits). Sans lui, `native_aperture_px` seul sur une ouverture
+  réellement décentrée produit un résultat **faux, silencieusement**
+  (recadrage au mauvais endroit) — comportement volontairement figé par
+  `tests/test_multi_resolution.py::test_native_aperture_px_alone_assumes_centred_and_is_wrong_if_not`,
+  pour qu'un changement futur de ce contrat soit visible.
+
 ### 12.4 Statut
 
 Implémenté pour les trois méthodes via `psf_to_wfe(..., pixel_pitch=,
 oversampling=, mask_binarize=, mask_native_aperture_px=,
-ho_native_aperture_px=, aperture_threshold=)` / `--pixel_pitch`/
+ho_native_aperture_px=, mask_native_aperture_center=,
+ho_native_aperture_center=, aperture_threshold=)` / `--pixel_pitch`/
 `--oversampling`/`--mask_no_binarize`/`--mask_native_aperture_px`/
-`--ho_native_aperture_px`/`--aperture_threshold` en CLI.
+`--ho_native_aperture_px`/`--mask_native_aperture_center`/
+`--ho_native_aperture_center`/`--aperture_threshold` en CLI.
 `eoqual.phaseretrieval.simulation` reste, à ce stade, à résolution unique
 (masque construit directement sur `npix` via `PupilGenerator`) — simuler
 un cas de test avec masque/PSF à des résolutions natives différentes (ou

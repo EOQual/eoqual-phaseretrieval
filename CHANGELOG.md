@@ -148,6 +148,18 @@
         dédiés (`tests/test_multi_resolution.py`), dont un bout en bout
         avec masque *et* carte HO chacun sur un cadre plus grand que leur
         ouverture, à des tailles de marge différentes entre les deux.
+    -   `native_aperture_px` seul suppose l'ouverture **centrée** dans le
+        fichier source (marges égales des deux côtés) — nouveaux
+        `mask_native_aperture_center`/`ho_native_aperture_center`
+        (`(row, col)`, `--mask_native_aperture_center ROW COL`/
+        `--ho_native_aperture_center ROW COL` en CLI) pour le cas
+        contraire ; l'auto-détection (sans `*_native_aperture_px`)
+        localise déjà une ouverture décentrée sans réglage
+        supplémentaire. 4 tests dédiés
+        (`tests/test_multi_resolution.py`), dont un qui fige explicitement
+        le comportement "faux silencieusement" de `native_aperture_px`
+        seul sur une ouverture réellement décentrée (pour qu'un futur
+        changement de ce contrat soit visible).
 
 ## Évolutions futures
 

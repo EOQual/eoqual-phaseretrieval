@@ -182,6 +182,7 @@ def _crop_to_aperture(
     *,
     native_aperture_px: Optional[int],
     aperture_threshold: float,
+    native_aperture_center: Optional[Tuple[int, int]] = None,
 ) -> NDArray[np.float64]:
     """
     Crop ``raw`` down to just its illuminated aperture, stripping any
@@ -195,17 +196,27 @@ def _crop_to_aperture(
     raw : NDArray
         Source array (mask or HO WFE map), at its own native resolution.
     native_aperture_px : int, optional
-        If given, the aperture is known to span exactly this many pixels,
-        centred on ``raw``'s own centre — skips auto-detection entirely
-        (the robust choice when the source file's own convention is
-        known, e.g. documented by the tool that produced it).
-        ``None`` (default): auto-detect the aperture's bounding box from
-        the pixel content (see ``aperture_threshold``), then crop a
-        square centred on that bounding box's centre, sized to its
-        larger dimension.
+        If given, the aperture is known to span exactly this many pixels
+        — skips auto-detection entirely (the robust choice when the
+        source file's own convention is known, e.g. documented by the
+        tool that produced it). ``None`` (default): auto-detect the
+        aperture's bounding box from the pixel content (see
+        ``aperture_threshold``), then crop a square centred on that
+        bounding box's centre, sized to its larger dimension — this path
+        already handles an **off-centre** aperture correctly on its own,
+        wherever it actually sits in the file.
     aperture_threshold : float
         Only used when ``native_aperture_px is None`` — see
         :func:`_detect_aperture_bbox`.
+    native_aperture_center : tuple of (int, int), optional
+        Only used when ``native_aperture_px`` is given: ``(row, col)``
+        pixel coordinates of the aperture's centre within ``raw``, if it
+        is **not** centred in the file (unequal margins on opposite
+        sides). ``None`` (default): assume it *is* centred, i.e.
+        ``raw.shape[i] // 2`` on each axis — margins equal on opposite
+        sides. Has no effect when ``native_aperture_px is None``: the
+        auto-detected bounding box already locates an off-centre aperture
+        on its own, no need to say where it is.
 
     Returns
     -------
@@ -242,8 +253,20 @@ def _crop_to_aperture(
                 f"native_aperture_px={size} plus grand que le fichier source "
                 f"({raw.shape[0]}x{raw.shape[1]}) — impossible."
             )
-        r0 = (raw.shape[0] - size) // 2
-        c0 = (raw.shape[1] - size) // 2
+        if native_aperture_center is None:
+            r0 = (raw.shape[0] - size) // 2
+            c0 = (raw.shape[1] - size) // 2
+        else:
+            centre_row, centre_col = native_aperture_center
+            half = size // 2
+            r0, c0 = centre_row - half, centre_col - half
+            if r0 < 0 or c0 < 0 or r0 + size > raw.shape[0] or c0 + size > raw.shape[1]:
+                raise ValueError(
+                    f"Ouverture ({size}x{size} px, centrée en "
+                    f"{native_aperture_center}) hors des limites du fichier "
+                    f"source ({raw.shape[0]}x{raw.shape[1]}) — vérifier "
+                    "native_aperture_center (et native_aperture_px)."
+                )
 
     return raw[r0:r0 + size, c0:c0 + size]
 
@@ -320,6 +343,7 @@ def load_and_prepare_mask(
     *,
     binarize: bool = True,
     native_aperture_px: Optional[int] = None,
+    native_aperture_center: Optional[Tuple[int, int]] = None,
     aperture_threshold: float = 0.01,
 ) -> Tuple[NDArray[np.float64], Optional[int]]:
     """
@@ -355,6 +379,14 @@ def load_and_prepare_mask(
         robust, deterministic crop instead of relying on
         ``aperture_threshold`` auto-detection — see
         :func:`_crop_to_aperture`. ``None`` (default): auto-detect.
+    native_aperture_center : tuple of (int, int), optional
+        Only used when ``native_aperture_px`` is given: ``(row, col)``
+        pixel coordinates of the aperture's centre within ``mask_path``,
+        if it is **not** centred in the file (unequal margins on opposite
+        sides). ``None`` (default): assume it *is* centred — equal
+        margins on opposite sides. Auto-detection (``native_aperture_px
+        is None``) locates an off-centre aperture on its own already, no
+        need for this.
     aperture_threshold : float, default 0.01
         Only used when ``native_aperture_px`` is ``None``: fraction of the
         mask's own maximum value above which a pixel counts as part of
@@ -415,6 +447,7 @@ def load_and_prepare_mask(
     # l'ouverture elle-même dans n_pup_target au lieu d'être ignorée.
     mask_aperture = _crop_to_aperture(
         mask_raw, native_aperture_px=native_aperture_px, aperture_threshold=aperture_threshold,
+        native_aperture_center=native_aperture_center,
     )
 
     # Interpolation bilinéaire + anti-aliasing (plutôt que plus-proche-voisin
@@ -442,6 +475,7 @@ def load_and_prepare_ho_wfe(
     oversampling: int = 1,
     *,
     native_aperture_px: Optional[int] = None,
+    native_aperture_center: Optional[Tuple[int, int]] = None,
     aperture_threshold: float = 0.01,
 ) -> NDArray[np.float64]:
     """
@@ -479,6 +513,9 @@ def load_and_prepare_ho_wfe(
         a smooth WFE surface can legitimately be near-zero within part of
         the aperture too (not just outside it), which auto-detection
         cannot always tell apart from padding.
+    native_aperture_center : tuple of (int, int), optional
+        See :func:`load_and_prepare_mask`. Only used when
+        ``native_aperture_px`` is given.
     aperture_threshold : float, default 0.01
         See :func:`load_and_prepare_mask`. Only used when
         ``native_aperture_px`` is ``None``.
@@ -514,6 +551,7 @@ def load_and_prepare_ho_wfe(
     )
     ho_wfe_aperture = _crop_to_aperture(
         ho_wfe_raw, native_aperture_px=native_aperture_px, aperture_threshold=aperture_threshold,
+        native_aperture_center=native_aperture_center,
     )
     return _resample_to_footprint(ho_wfe_aperture, N_psf, n_pup_target, order=3, anti_aliasing=True)
 

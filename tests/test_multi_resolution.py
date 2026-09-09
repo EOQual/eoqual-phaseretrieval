@@ -355,3 +355,86 @@ def test_end_to_end_padded_mask_and_ho_wfe_recover_truth(tmp_path):
     assert coeffs_nm[3] == pytest.approx(55.0, abs=8.0)
     assert coeffs_nm[4] == pytest.approx(27.5, abs=8.0)
     assert diagnostics["cost"] < 1e-2
+
+
+# ----------------------------------------------------------------------
+# Ouverture non centrée dans le fichier source
+# ----------------------------------------------------------------------
+
+def _off_centre_disk(canvas_size: int, aperture_size: int, top_left: tuple) -> np.ndarray:
+    """Un masque dont l'ouverture (`aperture_size` px) n'est PAS centrée
+    dans le cadre `canvas_size` px — coin haut-gauche à `top_left`."""
+    canvas = np.zeros((canvas_size, canvas_size), dtype=np.float64)
+    r0, c0 = top_left
+    canvas[r0:r0 + aperture_size, c0:c0 + aperture_size] = PupilGenerator(aperture_size).simple_disk()
+    return canvas
+
+
+def test_autodetect_locates_off_centre_aperture_without_any_hint(tmp_path):
+    """L'auto-détection n'a pas besoin de savoir où est l'ouverture — elle
+    la trouve, centrée ou non."""
+    top_left = (100, 220)  # centré serait (150, 150) pour un cadre 500/ouverture 200
+    padded = _off_centre_disk(canvas_size=500, aperture_size=200, top_left=top_left)
+    mask_path = _write_tiff(tmp_path, "mask_off_centre.tiff", padded)
+
+    mask, n_pup_target = load_and_prepare_mask(
+        psf_shape=(256, 256), mask_path=mask_path,
+        wavelength=WAVELENGTH, focal_length=FOCAL_LENGTH, pupil_diameter=PUPIL_DIAMETER,
+        pixel_pitch=PIXEL_PITCH,
+    )
+    expected_area = np.pi * (n_pup_target / 2) ** 2
+    assert mask.sum() == pytest.approx(expected_area, rel=0.05)
+
+
+def test_native_aperture_px_alone_assumes_centred_and_is_wrong_if_not(tmp_path):
+    """Sans ``native_aperture_center``, une ouverture décentrée donne un
+    résultat faux (silencieusement) — comportement documenté, pas un bug :
+    ce test fige ce contrat pour qu'un changement futur soit visible."""
+    top_left = (100, 220)
+    padded = _off_centre_disk(canvas_size=500, aperture_size=200, top_left=top_left)
+    mask_path = _write_tiff(tmp_path, "mask_off_centre.tiff", padded)
+
+    mask_autodetect, _ = load_and_prepare_mask(
+        psf_shape=(256, 256), mask_path=mask_path,
+        wavelength=WAVELENGTH, focal_length=FOCAL_LENGTH, pupil_diameter=PUPIL_DIAMETER,
+        pixel_pitch=PIXEL_PITCH,
+    )
+    mask_assumed_centred, _ = load_and_prepare_mask(
+        psf_shape=(256, 256), mask_path=mask_path,
+        wavelength=WAVELENGTH, focal_length=FOCAL_LENGTH, pupil_diameter=PUPIL_DIAMETER,
+        pixel_pitch=PIXEL_PITCH, native_aperture_px=200,
+    )
+    assert not np.array_equal(mask_autodetect, mask_assumed_centred)
+
+
+def test_native_aperture_px_with_explicit_centre_matches_autodetect(tmp_path):
+    """``native_aperture_center`` corrige exactement le cas précédent —
+    même résultat que l'auto-détection, de façon déterministe."""
+    top_left = (100, 220)
+    aperture_size = 200
+    padded = _off_centre_disk(canvas_size=500, aperture_size=aperture_size, top_left=top_left)
+    mask_path = _write_tiff(tmp_path, "mask_off_centre.tiff", padded)
+
+    mask_autodetect, _ = load_and_prepare_mask(
+        psf_shape=(256, 256), mask_path=mask_path,
+        wavelength=WAVELENGTH, focal_length=FOCAL_LENGTH, pupil_diameter=PUPIL_DIAMETER,
+        pixel_pitch=PIXEL_PITCH,
+    )
+    true_centre = (top_left[0] + aperture_size // 2, top_left[1] + aperture_size // 2)
+    mask_explicit, _ = load_and_prepare_mask(
+        psf_shape=(256, 256), mask_path=mask_path,
+        wavelength=WAVELENGTH, focal_length=FOCAL_LENGTH, pupil_diameter=PUPIL_DIAMETER,
+        pixel_pitch=PIXEL_PITCH, native_aperture_px=aperture_size, native_aperture_center=true_centre,
+    )
+    np.testing.assert_array_equal(mask_autodetect, mask_explicit)
+
+
+def test_native_aperture_center_out_of_bounds_raises(tmp_path):
+    padded = _off_centre_disk(canvas_size=500, aperture_size=200, top_left=(100, 220))
+    mask_path = _write_tiff(tmp_path, "mask_off_centre.tiff", padded)
+    with pytest.raises(ValueError):
+        load_and_prepare_mask(
+            psf_shape=(256, 256), mask_path=mask_path,
+            wavelength=WAVELENGTH, focal_length=FOCAL_LENGTH, pupil_diameter=PUPIL_DIAMETER,
+            pixel_pitch=PIXEL_PITCH, native_aperture_px=200, native_aperture_center=(10, 10),
+        )
