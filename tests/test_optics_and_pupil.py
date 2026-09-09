@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from eoqual.phaseretrieval.optics import build_zernike_basis, phase_from_coefficients, psf_from_phase
 from eoqual.phaseretrieval.pupil import PupilGenerator
@@ -18,6 +19,35 @@ def test_pupil_annular_removes_centre():
     mask = PupilGenerator(64).annular(obscuration=0.3)
     assert mask[32, 32] == 0.0
     assert mask.sum() < PupilGenerator(64).simple_disk().sum()
+
+
+def test_pupil_simple_disk_excludes_corners():
+    """
+    Régression : ``PupilGenerator.rho`` était clippé à 1.0 avant le test
+    ``rho <= 1.0``, rendant ce test toujours vrai — ``simple_disk()``
+    renvoyait un masque plein cadre (tous les pixels à 1, y compris les
+    coins) plutôt qu'un disque inscrit. Aucun test existant ne comparait
+    au bon nombre de pixels (seul le centre était vérifié) ni ne vérifiait
+    les coins, donc rien ne l'aurait détecté — trouvé en vérifiant la prise
+    en compte de résolutions multiples (REFERENCE_TECHNIQUE.md §12).
+    """
+    npix = 64
+    mask = PupilGenerator(npix).simple_disk()
+    assert mask[0, 0] == 0.0
+    assert mask[0, -1] == 0.0
+    assert mask[-1, 0] == 0.0
+    assert mask[-1, -1] == 0.0
+    # Surface proche de π r² (disque inscrit de rayon npix//2), pas npix².
+    expected_area = np.pi * (npix // 2) ** 2
+    assert mask.sum() == pytest.approx(expected_area, rel=0.02)
+    assert mask.sum() < npix * npix
+
+
+def test_pupil_annular_excludes_corners_and_outer_ring():
+    npix = 64
+    mask = PupilGenerator(npix).annular(obscuration=0.3)
+    assert mask[0, 0] == 0.0  # coin : hors du disque inscrit, pas seulement hors obstruction
+    assert mask.sum() < npix * npix
 
 
 def test_zero_phase_gives_diffraction_limited_airy_peak():

@@ -84,6 +84,55 @@
         n'étaient jusqu'ici couverts par aucun exemple exécutable. Les deux
         notebooks (`examples/*.ipynb`) sont ré-exécutés de bout en bout
         (aucune erreur) pour valider l'ensemble.
+    -   **Correctif — bug significatif** : `pupil.PupilGenerator` clippait
+        son rayon normalisé à 1.0 *avant* le test `rho <= 1.0` utilisé par
+        `simple_disk()`/`annular()`/`with_spiders()`, rendant ce test
+        toujours vrai — les trois méthodes renvoyaient un masque **plein
+        cadre** (tous les pixels à 1, y compris les coins) plutôt qu'un
+        disque/anneau réellement borné. Aucun test existant ne l'avait
+        détecté (seul le pixel central était vérifié) : les nombreux
+        essais round-trip restaient parfaitement cohérents en interne
+        (même masque, biaisé, utilisé pour simuler *et* ajuster), sans
+        jamais comparer à une géométrie de référence indépendante. Corrigé
+        (retrait du `np.clip`) ; régression couverte
+        (`tests/test_optics_and_pupil.py::test_pupil_simple_disk_excludes_corners`/
+        `test_pupil_annular_excludes_corners_and_outer_ring`). Trouvé en
+        vérifiant la prise en compte de résolutions multiples (point
+        suivant). Tous les exemples numériques de `REFERENCE_TECHNIQUE.md`
+        calculés sur un masque annulaire (§10, §10.2) recalculés en
+        conséquence ; les deux notebooks ré-exécutés une nouvelle fois (un
+        cas de démo à `zernike_order=15` s'est révélé sujet à un minimum
+        local isolé avec la géométrie de pupille désormais correcte —
+        réduit à 12, cf. `tests/test_simulation_roundtrip.py`).
+    -   **Masque, carte de WFE haut ordre et PSF à des résolutions natives
+        indépendantes** (y compris une PSF suréchantillonnée par
+        super-résolution) — REFERENCE_TECHNIQUE.md §12 :
+        - `detector_size` remplacé par `pixel_pitch` (pas-pixel natif du
+          détecteur, constante capteur) + `oversampling` (entier, défaut
+          `1`) sur `psf_to_wfe`/`load_and_prepare_mask`/CLI — rend explicite
+          un contrat auparavant implicite dans le nom du paramètre.
+          Changement cassant, tous les appelants mis à jour (pipeline,
+          CLI, README, notebook).
+        - Nouvelle fonction partagée `io_utils.compute_pupil_footprint_px`
+          (masque et carte HO dérivent le même `N_pup_target`, donc restent
+          co-enregistrés même à partir de fichiers sources différents).
+        - Nouvelle fonction `io_utils.load_and_prepare_ho_wfe` : la carte
+          HO peut désormais venir de sa propre résolution native
+          (interpolation cubique, jamais binarisée) — jusqu'ici
+          `known_ho_wfe_nm`/`known_ho_wfe_path` exigeaient une égalité
+          stricte de forme avec le masque.
+        - `load_and_prepare_mask` : interpolation bilinéaire + anti-aliasing
+          (au lieu du plus-proche-voisin sans anti-aliasing) avant un
+          éventuel seuillage binaire ; nouveau `binarize` (`True` par
+          défaut) pour conserver une transmission graduée `[0, 1]` plutôt
+          qu'un seuil dur — perd moins d'information au rééchantillonnage
+          dans les deux cas. Le raccourci « masque déjà à la résolution de
+          la PSF → pas de mise à l'échelle » passe de `logger.debug` à
+          `logger.warning`, pour ne plus passer inaperçu.
+        - Tests dédiés (`tests/test_multi_resolution.py`, 6 tests) :
+          invariance de `N_pup_target` au suréchantillonnage cohérent,
+          masque/carte HO à des résolutions natives différentes l'une de
+          l'autre et de la PSF, bout en bout via `psf_to_wfe`.
 
 ## Évolutions futures
 

@@ -36,12 +36,12 @@ def test_resolve_zernike_basis_orthogonalized_matches_gram_schmidt():
 
 def test_resolve_zernike_basis_raises_on_degenerate_mode_instead_of_shifting_index():
     # Pupille très sous-échantillonnée (peu de pixels utiles) + ordre élevé
-    # : moins de degrés de liberté que de modes -> au moins un mode devient
-    # linéairement dépendant sur ce masque -> doit lever, pas décaler
-    # silencieusement la correspondance indice/Noll.
-    mask = PupilGenerator(16).annular(obscuration=0.9)
+    # : moins de degrés de liberté (10 pixels illuminés) que de modes (40)
+    # -> au moins un mode devient linéairement dépendant sur ce masque ->
+    # doit lever, pas décaler silencieusement la correspondance indice/Noll.
+    mask = PupilGenerator(8).annular(obscuration=0.9)
     with pytest.raises(ValueError):
-        resolve_zernike_basis(npix=16, nterms=40, mask=mask, orthogonalize=True)
+        resolve_zernike_basis(npix=8, nterms=40, mask=mask, orthogonalize=True)
 
 
 def test_optimization_recovers_truth_expressed_in_the_orthogonalized_basis():

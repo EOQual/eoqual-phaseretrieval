@@ -418,8 +418,9 @@ méthodes.
 
 ```python
 coeffs_nm, phase_fit_nm, diagnostics = psf_to_wfe(
-    psf_path, mask_path, wavelength, focal_length, pupil_diameter, detector_size,
+    psf_path, mask_path, wavelength, focal_length, pupil_diameter, pixel_pitch,
     method="gerchberg_saxton" | "optimization" | "phase_diversity",
+    oversampling=1,  # §12 : >1 pour une PSF suréchantillonnée (super-résolution)
     zernike_order=36,
     # ... paramètres spécifiques à chaque méthode (voir pipeline.py) ...
 )
@@ -832,7 +833,7 @@ référence exprimés sur la base de Noll standard : même sous-espace de
 fonctions, mais une base différente au-delà des tout premiers modes
 (§ ci-dessus). Vérifié empiriquement sur une pupille annulaire à 30 %
 d'obstruction : la même PSF simulée en base standard, ajustée avec
-`orthogonal_basis=True`, donne une corrélation ≈ 0,99 (au lieu de 1,00 en
+`orthogonal_basis=True`, donne une corrélation ≈ 0,998 (au lieu de 1,00 en
 base standard) avec la vérité *exprimée en base standard* — pas une
 régression de la méthode, un effet de changement de base (et de
 convergence du solveur, le coût final y étant aussi moins bon).
@@ -873,14 +874,14 @@ exactement dans l'espace couvert par la base standard.
 Point à connaître avant d'interpréter le résultat : sur un masque obstrué,
 un mode Gram-Schmidt d'indice `j` peut mélanger un peu de **piston** (Z1)
 au mode standard homonyme (vérifié empiriquement : le mode Gram-Schmidt
-« 4 » de l'exemple ci-dessus vaut `-0,196·Z1 + 1,269·Z4`, jamais de
+« 4 » de l'exemple ci-dessus vaut `-0,170·Z1 + 1,114·Z4`, jamais de
 tip-tilt sur un masque centrosymétrique — même argument de symétrie qu'en
 §3.7). Cette part de piston est perdue lors de la reprojection (retirée
 par `fit_zernike`, comme partout ailleurs dans ce projet — Z1-Z3 non
 observables sans référence externe), ce qui explique un léger décalage
 d'amplitude entre le coefficient Gram-Schmidt d'origine et son équivalent
-standard reprojeté (`+27 %` dans l'exemple ci-dessus, `55 nm` en base
-Gram-Schmidt devenant `69,8 nm` de Z4 standard) : rien d'anormal, la
+standard reprojeté (`+12 %` dans l'exemple ci-dessus, `55 nm` en base
+Gram-Schmidt devenant `61,4 nm` de Z4 standard) : rien d'anormal, la
 vérité terrain elle-même n'a de sens que dans la base où elle a été
 définie. Utiliser plutôt `project_orthogonal_to_standard` pour retrouver
 une vérité pensée nativement en base standard (aberration physique connue)
@@ -1031,6 +1032,100 @@ haut ordre (HO) — seul le premier est implémenté à ce stade :
   toucher au reste du modèle d'optimisation (§6.3). Cette approche est
   plus approximative (un effet *moyen*, pas la vraie carte) mais
   s'appliquerait quand la carte exacte ci-dessus n'est pas disponible.
+
+---
+
+## 12. Résolutions multiples : masque, carte HO, PSF suréchantillonnée
+
+Masque pupillaire, carte de WFE haut ordre (HO, §11.3) et PSF n'ont pas de
+raison de partager la même résolution native : le masque peut venir d'un
+outil CAO indépendant, la carte HO d'une mesure de métrologie sur sa
+propre grille, et la PSF elle-même peut être **suréchantillonnée**
+(reconstruite par super-résolution — Shift-and-Add, ePSF, PSFr, §5.0 — à
+2x, 3x, 4x le pas natif du détecteur). `psf_to_wfe`/`load_and_prepare_mask`/
+`load_and_prepare_ho_wfe` prennent ces trois cas en charge.
+
+### 12.1 Le principe : `pixel_pitch` + `oversampling`, pas `detector_size`
+
+Le modèle direct (`phase_from_coefficients`, `psf_from_phase`) n'a qu'une
+seule contrainte réelle : masque, base de Zernike/carte HO et PSF vivent
+sur la **même grille `npix`** (celle de la PSF), la correspondance
+physique passant uniquement par la taille en pixels de l'ouverture sur
+cette grille (`N_pup`, `io_utils.compute_pupil_footprint_px`) :
+
+$$
+N_{pup}=\frac{\lambda f}{D\,\Delta_{det}}\quad\text{avec}\quad
+\Delta_{det}=\frac{\text{pixel\_pitch}}{\text{oversampling}}
+$$
+
+où `pixel_pitch` est le pas-pixel **natif** du détecteur (une constante
+capteur) et `oversampling` (entier, `1` par défaut) le facteur de
+suréchantillonnage de la grille de travail par rapport à cette résolution
+native — `4` pour une PSF reconstruite à 4x le pas natif.
+
+**Résultat à connaître, contre-intuitif mais correct** : quand `npix`
+grandit proportionnellement à `oversampling` (le cas normal — on lit
+simplement `npix` sur le tableau PSF suréchantillonné fourni), `N_pup`
+reste **constant**. Le suréchantillonnage revient, dans ce modèle à une
+seule FFT, à zero-padder la pupille *autour* de l'ouverture (plus de fond,
+même résolution de l'ouverture en pixels), pas à résoudre l'ouverture
+elle-même plus finement — exactement la recette standard de zero-padding
+en optique de Fourier pour affiner l'échantillonnage en sortie. Ce qui
+grandit avec `oversampling`, c'est la marge de padding
+`npix - N_pup` (vérifié : `tests/test_multi_resolution.py::test_pupil_footprint_invariant_under_consistent_oversampling`).
+
+Avant cette clarification, le paramètre s'appelait `detector_size`
+(« taille physique du détecteur » — pas-pixel × nombre de pixels) :
+dimensionnellement équivalent (`pixel_pitch = detector_size / N_natif`),
+mais son nom suggérait une constante capteur alors qu'il fallait
+implicitement le réinterpréter comme « étendue physique couverte par CE
+tableau », un contrat non documenté et facile à casser sans s'en
+apercevoir. `pixel_pitch` + `oversampling` explicite le rendent
+auto-documenté.
+
+### 12.2 Masque et carte HO à leur résolution propre
+
+`load_and_prepare_mask`/`load_and_prepare_ho_wfe` acceptent un fichier à
+**n'importe quelle résolution native**, indépendante de `npix` et l'une de
+l'autre : chacune redimensionne (via `N_pup` commun, calculé une fois par
+`compute_pupil_footprint_px`) puis centre/zero-pad sur la grille de
+travail — masque et carte HO finissent donc co-enregistrés même s'ils
+viennent d'outils différents (`tests/test_multi_resolution.py`,
+`test_load_and_prepare_ho_wfe_rescales_independently_of_mask_resolution`).
+
+Si le fichier a déjà exactement la forme de la PSF, la mise à l'échelle
+physique est **ignorée** (`logger.warning`, pas `debug` — pour ne pas
+passer inaperçu) : cas normal d'un masque/carte construits directement sur
+la grille de travail (simulateur, `PupilGenerator`), mais aussi le piège
+signalé en tête de cette section — une coïncidence de forme n'est pas une
+preuve d'enregistrement correct si la source est un outil indépendant.
+
+**Perte d'information minimale au rééchantillonnage** :
+- Masque (`load_and_prepare_mask`) : interpolation bilinéaire +
+  anti-aliasing (au lieu du plus-proche-voisin sans anti-aliasing
+  d'avant, qui aliasait les structures fines — bras d'araignée — en
+  sous-échantillonnage), puis seuillage binaire par défaut
+  (`binarize=True`). `binarize=False` conserve la transmission graduée
+  `[0, 1]` au lieu d'un seuil dur — préserve l'information de bord
+  sous-pixel ; c'est aussi le bon choix pour une pupille réellement
+  apodisée (transmission non uniforme, §2.2). Aucune méthode de ce projet
+  n'exige un masque strictement binaire — `psf_from_phase` accepte déjà
+  n'importe quelle amplitude dans `[0, 1]`.
+- Carte HO (`load_and_prepare_ho_wfe`) : interpolation **cubique**
+  (`order=3`), jamais de seuillage — c'est une grandeur physique continue,
+  pas une géométrie binaire ; l'interpolation d'ordre le plus élevé
+  disponible est ici la méthode qui perd le moins d'information sur une
+  surface lisse.
+
+### 12.3 Statut
+
+Implémenté pour les trois méthodes via `psf_to_wfe(..., pixel_pitch=,
+oversampling=, mask_binarize=)` / `--pixel_pitch`/`--oversampling`/
+`--mask_no_binarize` en CLI. `eoqual.phaseretrieval.simulation` reste, à
+ce stade, à résolution unique (masque construit directement sur `npix` via
+`PupilGenerator`) — simuler un cas de test avec masque/PSF à des
+résolutions natives différentes reste à faire manuellement (voir
+`tests/test_multi_resolution.py` pour le patron).
 
 ---
 

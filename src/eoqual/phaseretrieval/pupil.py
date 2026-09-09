@@ -29,7 +29,12 @@ class PupilGenerator:
     def __init__(self, npix: int) -> None:
         self.npix = npix
         y, x = np.indices((npix, npix)) - npix // 2
-        self.rho = np.clip(np.sqrt(x ** 2 + y ** 2) / (npix // 2), 0.0, 1.0)
+        # Rayon normalisé, volontairement NON clippé à 1.0 : les méthodes
+        # ci-dessous testent justement `rho <= 1.0` pour délimiter la
+        # pupille (bug corrigé — un clip ici rendait ce test toujours vrai,
+        # produisant un masque plein-cadre au lieu d'un disque/anneau réel ;
+        # voir tests/test_pupil.py::test_simple_disk_excludes_corners).
+        self.rho = np.sqrt(x ** 2 + y ** 2) / (npix // 2)
         self.theta = np.arctan2(y, x)
 
     def simple_disk(self) -> NDArray[np.float64]:

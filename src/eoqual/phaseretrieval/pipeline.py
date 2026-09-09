@@ -40,7 +40,7 @@ import numpy as np
 from loguru import logger
 from numpy.typing import NDArray
 
-from .io_utils import load_and_prepare_mask, load_image, visualisation_diagnostics
+from .io_utils import load_and_prepare_ho_wfe, load_and_prepare_mask, load_image, visualisation_diagnostics
 from .optics import phase_from_coefficients
 from .zernike_basis_orthogonal import resolve_zernike_basis
 from .backends.gerchberg_saxton import RetrievalConfig, gerchberg_saxton
@@ -58,10 +58,12 @@ def psf_to_wfe(
     wavelength: float,
     focal_length: float,
     pupil_diameter: float,
-    detector_size: float,
+    pixel_pitch: float,
     method: Method = "gerchberg_saxton",
+    oversampling: int = 1,
     zernike_order: int = 36,
     orthogonal_basis: bool = False,
+    mask_binarize: bool = True,
     verbose: bool = True,
     # --- Gerchberg-Saxton ---
     max_iter: int = 200,
@@ -87,17 +89,31 @@ def psf_to_wfe(
     Parameters
     ----------
     psf_path, mask_path : str or Path
-        File paths to the PSF intensity image and the binary pupil mask.
+        File paths to the PSF intensity image and the pupil mask — each at
+        its **own** native resolution, not necessarily matching
+        ``psf_path``'s (see ``oversampling`` and §12 of
+        ``REFERENCE_TECHNIQUE.md`` for the general multi-resolution case:
+        a super-resolved PSF, a mask from a separate CAD/metrology tool).
     wavelength : float
         Central wavelength in metres (e.g. ``550e-9`` for 550 nm).
     focal_length : float
         Focal length [m], used to physically scale the pupil mask.
     pupil_diameter : float
         Pupil diameter [m].
-    detector_size : float
-        Detector size [m].
+    pixel_pitch : float
+        **Native** detector pixel pitch [m] — a fixed property of the
+        sensor, independent of ``oversampling``. See
+        :func:`io_utils.compute_pupil_footprint_px`.
     method : {"gerchberg_saxton", "optimization", "phase_diversity"}
         Phase-retrieval algorithm to use.
+    oversampling : int, default 1
+        Oversampling factor of ``psf_path`` (and ``diversity_path``)
+        relative to native detector sampling — e.g. ``4`` for a PSF
+        reconstructed by super-resolution (Shift-and-Add, ePSF, PSFr —
+        §5.0) at 4x the native pixel pitch. ``1`` (default): the PSF is
+        already at native detector resolution. The effective pixel pitch
+        used for the mask/HO-map physical registration is
+        ``pixel_pitch / oversampling``.
     zernike_order : int, default 36
         Number of Zernike modes (Noll order) to fit.
     orthogonal_basis : bool, default False
@@ -107,6 +123,13 @@ def psf_to_wfe(
         recommended whenever the pupil is not a full, unobstructed disc
         (central obstruction, spiders). ``False`` (default) keeps the
         historical behaviour, for all three methods.
+    mask_binarize : bool, default True
+        Threshold the loaded mask to strict ``{0, 1}`` (default, historical
+        behaviour) or keep it as a graded ``[0, 1]`` transmission — see
+        ``binarize`` on :func:`io_utils.load_and_prepare_mask`. Only
+        matters when the mask is *not* already on the PSF's own grid (the
+        physical-rescale path); a mask already pre-registered is used
+        as-is either way.
     verbose : bool, default True
         Print progress / solver traces and display Plotly diagnostics.
     max_iter : int
@@ -145,13 +168,16 @@ def psf_to_wfe(
         for ``"phase_diversity"``, which is already unambiguous.
     known_ho_wfe_path : str or Path, optional
         [optimization, phase_diversity] Path to a known, fixed high-order
-        (HO) WFE map [nm], same shape as the PSF/mask — measured
-        independently (interferogram, as-built optical model, ground
-        calibration). Added to the modelled phase without ever being
-        optimised, so it stops silently biasing the fitted low-order
-        coefficients (see §11.3 of ``REFERENCE_TECHNIQUE.md``). Ignored
-        (with a warning) for ``"gerchberg_saxton"``, whose iteration has
-        no low/high-order split to attach a fixed term to.
+        (HO) WFE map [nm], at its **own** native resolution (registered
+        onto the working grid the same way as ``mask_path``, via
+        :func:`io_utils.load_and_prepare_ho_wfe` — need not match
+        ``mask_path``'s native resolution either) — measured independently
+        (interferogram, as-built optical model, ground calibration). Added
+        to the modelled phase without ever being optimised, so it stops
+        silently biasing the fitted low-order coefficients (see §11.3 of
+        ``REFERENCE_TECHNIQUE.md``). Ignored (with a warning) for
+        ``"gerchberg_saxton"``, whose iteration has no low/high-order
+        split to attach a fixed term to.
 
     Returns
     -------
@@ -198,17 +224,22 @@ def psf_to_wfe(
         wavelength=wavelength,
         focal_length=focal_length,
         pupil_diameter=pupil_diameter,
-        detector_size=detector_size,
+        pixel_pitch=pixel_pitch,
+        oversampling=oversampling,
+        binarize=mask_binarize,
     )
 
     known_ho_wfe_nm: Optional[NDArray[np.float64]] = None
     if known_ho_wfe_path is not None and method != "gerchberg_saxton":
-        known_ho_wfe_nm = load_image(known_ho_wfe_path)
-        if known_ho_wfe_nm.shape != mask.shape:
-            raise ValueError(
-                f"known_ho_wfe_path shape {known_ho_wfe_nm.shape} != "
-                f"mask shape {mask.shape}"
-            )
+        known_ho_wfe_nm = load_and_prepare_ho_wfe(
+            psf_shape=(N_psf, N_psf),
+            ho_wfe_path=known_ho_wfe_path,
+            wavelength=wavelength,
+            focal_length=focal_length,
+            pupil_diameter=pupil_diameter,
+            pixel_pitch=pixel_pitch,
+            oversampling=oversampling,
+        )
 
     rad_to_nm = wavelength * 1e9 / (2.0 * np.pi)
     phase_nm: Optional[NDArray[np.float64]] = None
@@ -331,8 +362,19 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--wavelength", type=float, default=550e-9, help="Wavelength in metres (default 550 nm)")
     parser.add_argument("--focal_length", type=float, default=4.0, help="Focal length in metres")
     parser.add_argument("--pupil_diameter", type=float, default=0.5, help="Pupil diameter in metres")
-    parser.add_argument("--detector_size", type=float, default=4e-6, help="Detector size in metres")
+    parser.add_argument("--pixel_pitch", type=float, default=4e-6, help="Native detector pixel pitch in metres")
+    parser.add_argument(
+        "--oversampling", type=int, default=1,
+        help="Oversampling factor of --psf (and --diversity) relative to native "
+             "detector sampling, e.g. 4 for a super-resolved PSF (default 1: "
+             "already at native resolution).",
+    )
     parser.add_argument("--zernike_order", type=int, default=36, help="Maximum Zernike Noll order")
+    parser.add_argument(
+        "--mask_no_binarize", action="store_false", dest="mask_binarize",
+        help="Keep the mask as a graded [0,1] transmission after resampling "
+             "instead of thresholding it to strict {0,1} (default: binarize).",
+    )
     parser.add_argument(
         "--orthogonal_basis", action="store_true",
         help="Fit on a Gram-Schmidt basis re-orthogonalised on the actual "
@@ -415,9 +457,11 @@ def main() -> None:
             "wavelength": args.wavelength,
             "focal_length": args.focal_length,
             "pupil_diameter": args.pupil_diameter,
-            "detector_size": args.detector_size,
+            "pixel_pitch": args.pixel_pitch,
+            "oversampling": args.oversampling,
             "zernike_order": args.zernike_order,
             "orthogonal_basis": args.orthogonal_basis,
+            "mask_binarize": args.mask_binarize,
             "max_iter": args.max_iter,
             "beta": args.beta,
             "seed": args.seed,
@@ -448,10 +492,12 @@ def main() -> None:
         wavelength=proc_param["wavelength"],
         focal_length=proc_param["focal_length"],
         pupil_diameter=proc_param["pupil_diameter"],
-        detector_size=proc_param["detector_size"],
+        pixel_pitch=proc_param["pixel_pitch"],
+        oversampling=proc_param["oversampling"],
         method=proc_param["method"],
         zernike_order=proc_param["zernike_order"],
         orthogonal_basis=proc_param["orthogonal_basis"],
+        mask_binarize=proc_param["mask_binarize"],
         max_iter=proc_param["max_iter"],
         beta=proc_param["beta"],
         seed=proc_param["seed"],

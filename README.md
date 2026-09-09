@@ -39,7 +39,7 @@ from eoqual.phaseretrieval import psf_to_wfe
 
 coeffs_nm, phase_fit_nm, diagnostics = psf_to_wfe(
     "psf.tiff", "mask.tiff",
-    wavelength=550e-9, focal_length=4.0, pupil_diameter=0.5, detector_size=4e-6,
+    wavelength=550e-9, focal_length=4.0, pupil_diameter=0.5, pixel_pitch=4e-6,
     method="phase_diversity",
     diversity_path="psf_defocus.tiff", defocus=275e-9,
 )
@@ -50,6 +50,11 @@ ou `"phase_diversity"`) derrière ce même point d'entrée — voir
 `eoqual.phaseretrieval.runner.list_methods()` pour l'afficher en console,
 et [REFERENCE_TECHNIQUE.md](REFERENCE_TECHNIQUE.md) §4-8 pour savoir
 laquelle choisir selon le cas d'usage.
+
+Masque, carte de WFE haut ordre (`known_ho_wfe_path`) et PSF peuvent
+chacun venir d'une résolution native différente — y compris une PSF
+suréchantillonnée par super-résolution (`oversampling=`) : voir
+[REFERENCE_TECHNIQUE.md](REFERENCE_TECHNIQUE.md) §12.
 
 Ligne de commande équivalente :
 

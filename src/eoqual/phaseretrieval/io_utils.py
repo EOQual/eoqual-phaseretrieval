@@ -49,64 +49,211 @@ def load_image(path: Union[str, Path]) -> NDArray[np.float64]:
     return img
 
 
+def compute_pupil_footprint_px(
+    npix: int,
+    wavelength: float,
+    focal_length: float,
+    pupil_diameter: float,
+    pixel_pitch: float,
+    oversampling: int = 1,
+) -> int:
+    """
+    Number of ``npix``-grid pixels the aperture must span for the PSF
+    produced by :func:`optics.psf_from_phase` to be correctly sampled.
+
+    Shared by :func:`load_and_prepare_mask` and
+    :func:`load_and_prepare_ho_wfe`, so a pupil mask and an HO WFE map
+    coming from *different* native resolutions still end up registered on
+    the exact same footprint within the working ``npix`` grid.
+
+    Parameters
+    ----------
+    npix : int
+        Size (pixels) of the working grid — the PSF array's own size,
+        **whatever its native or oversampled resolution actually is**
+        (see ``oversampling``).
+    wavelength : float
+        Central wavelength **in metres**.
+    focal_length : float
+        Focal length ``f`` **in metres**.
+    pupil_diameter : float
+        Physical pupil diameter ``D`` **in metres**.
+    pixel_pitch : float
+        **Native** detector pixel pitch **in metres** — a fixed property
+        of the sensor, independent of ``oversampling``.
+    oversampling : int, default 1
+        Oversampling factor of the PSF/mask/HO-map grid relative to native
+        detector sampling — e.g. ``4`` for a PSF reconstructed by
+        super-resolution (Shift-and-Add, ePSF, PSFr — see §5.0 of
+        ``REFERENCE_TECHNIQUE.md``) at 4x the native pixel pitch. ``1``
+        (default) means ``npix`` already counts native detector pixels.
+        The *effective* pixel pitch on the working grid is
+        ``pixel_pitch / oversampling``.
+
+        Counter-intuitive but correct: when ``npix`` itself scales with
+        ``oversampling`` (the normal case — you simply read ``npix`` off
+        an oversampled PSF array that already has ``oversampling`` times
+        as many samples as its native version), ``N_pup_target`` comes out
+        **independent of** ``oversampling`` — the ``k``'s cancel exactly.
+        Physically: oversampling a PSF through this single-FFT model means
+        zero-padding the pupil array *around* the aperture (more
+        background, same aperture resolution in pixels), not resolving
+        the aperture itself more finely — exactly the standard Fourier-
+        optics zero-padding recipe for a finer output sampling. What
+        *does* grow with oversampling is the padding margin,
+        ``npix - N_pup_target``.
+
+    Returns
+    -------
+    int
+        ``N_pup_target``, the number of ``npix``-grid pixels the aperture
+        spans.
+
+    Notes
+    -----
+    .. math::
+        N_{pup}=\\frac{\\lambda f}{D\\,\\Delta_{det}}\\quad\\text{with}\\quad
+        \\Delta_{det}=\\frac{\\text{pixel\\_pitch}}{\\text{oversampling}}
+
+    Raises
+    ------
+    ValueError
+        If the computed footprint exceeds ``npix`` (would need to zero-pad
+        the PSF, or increase ``oversampling``/``pixel_pitch`` to shrink it).
+    """
+    effective_pixel_pitch = pixel_pitch / oversampling
+    airy_pixels = (wavelength * focal_length) / (pupil_diameter * effective_pixel_pitch)
+    n_pup_target = int(np.round(npix / airy_pixels))
+
+    if n_pup_target > npix:
+        raise ValueError(
+            f"Required pupil diameter ({n_pup_target} px) exceeds the grid "
+            f"size ({npix} px). Pad the PSF, increase oversampling, or "
+            "check pixel_pitch/wavelength/focal_length/pupil_diameter."
+        )
+    return n_pup_target
+
+
+def _resample_to_footprint(
+    raw: NDArray[np.float64],
+    npix: int,
+    n_pup_target: int,
+    *,
+    order: int,
+    anti_aliasing: bool,
+) -> NDArray[np.float64]:
+    """
+    Resize ``raw`` (its **whole** array extent taken as the aperture
+    footprint, edge to edge — the convention already used by
+    :class:`pupil.PupilGenerator`) to ``n_pup_target`` x ``n_pup_target``,
+    then zero-pad/centre it into an ``npix`` x ``npix`` canvas.
+
+    Shared resampling step for both a pupil mask (see
+    ``load_and_prepare_mask``) and an HO WFE map (see
+    ``load_and_prepare_ho_wfe``) — only the interpolation ``order`` and
+    whether the caller re-binarises afterwards differ between the two.
+
+    Parameters
+    ----------
+    raw : NDArray
+        Source array at its own native resolution.
+    npix : int
+        Size of the output (working-grid) canvas.
+    n_pup_target : int
+        Size the aperture footprint must occupy within that canvas — see
+        :func:`compute_pupil_footprint_px`.
+    order : int
+        ``skimage.transform.resize`` interpolation order — ``0``
+        (nearest) for a strictly binary mask with no anti-aliasing
+        desired, ``1`` (bilinear) for a mildly graded mask, ``3``
+        (bicubic) for a smooth, continuous quantity such as a WFE map.
+    anti_aliasing : bool
+        Passed through to ``skimage.transform.resize`` — should be
+        ``True`` whenever downsampling (``raw.shape[0] > n_pup_target``)
+        to avoid aliasing fine structure (e.g. spider arms) into noise;
+        harmless otherwise.
+
+    Returns
+    -------
+    NDArray
+        ``(npix, npix)`` array, ``float64``.
+    """
+    if raw.shape == (n_pup_target, n_pup_target):
+        resampled = raw.astype(np.float64)
+    else:
+        resampled = resize(
+            raw, output_shape=(n_pup_target, n_pup_target),
+            order=order, anti_aliasing=anti_aliasing, preserve_range=True,
+        )
+
+    canvas = np.zeros((npix, npix), dtype=np.float64)
+    off = (npix - n_pup_target) // 2
+    canvas[off:off + n_pup_target, off:off + n_pup_target] = resampled
+    return canvas
+
+
 def load_and_prepare_mask(
     psf_shape: Tuple[int, int],
     mask_path: Union[str, Path],
     wavelength: float,
     focal_length: float,
     pupil_diameter: float,
-    detector_size: float,
-) -> Tuple[NDArray[np.uint8], Optional[int]]:
+    pixel_pitch: float,
+    oversampling: int = 1,
+    *,
+    binarize: bool = True,
+) -> Tuple[NDArray[np.float64], Optional[int]]:
     """
-    Load a binary pupil mask, resize it to the physical pupil size that
+    Load a pupil mask, resize it to the physical pupil size that
     corresponds to the supplied PSF, and embed it (zero-pad) into an array
     of the same size as the PSF.
 
     If the raw mask image is *already* the same shape as the PSF, it is
-    assumed to be pre-registered on the PSF grid (e.g. produced by a
-    simulator) and is used as-is, skipping the physical resize step.
+    assumed to be pre-registered on the working grid (e.g. produced by a
+    simulator, or already at the correct oversampled resolution) and is
+    used as-is, skipping the physical resize step — this is the normal
+    (and only tested) path for masks built alongside their PSF on the same
+    grid; see §12 of ``REFERENCE_TECHNIQUE.md`` for the multi-resolution
+    case (mask/PSF/HO-map each at their own native resolution) this
+    function is designed for otherwise.
 
     Parameters
     ----------
     psf_shape : tuple[int, int]
         Shape of the PSF image (must be square, e.g. ``(N_psf, N_psf)``).
     mask_path : str or pathlib.Path
-        Path to the raw mask image (binary or grayscale).
-    wavelength : float
-        Central wavelength **in metres** (e.g. ``550e-9``).
-    focal_length : float
-        Focal length ``f`` of the imaging system **in metres**.
-    pupil_diameter : float
-        Physical pupil diameter ``D`` **in metres**.
-    detector_size : float
-        Physical size of the detector (pixel-pitch x num-pixels) **in metres**.
+        Path to the raw mask image (binary or grayscale), at **its own**
+        native resolution — unrelated to ``psf_shape``; only its overall
+        aspect (the aperture fills the whole image, edge to edge) matters.
+    wavelength, focal_length, pupil_diameter, pixel_pitch, oversampling
+        See :func:`compute_pupil_footprint_px`.
+    binarize : bool, default True
+        If True (default, historical behaviour), threshold the result at
+        ``0.5`` to a strict binary mask after resampling. If False, keep
+        the graded ``[0, 1]`` transmission produced by the (anti-aliased)
+        resize — preserves sub-pixel edge information instead of
+        collapsing it to a hard boundary; also the right choice for a
+        genuinely apodised (non-binary) pupil. Every method in this
+        project accepts a graded mask (:class:`pupil.PupilGenerator`
+        already documents this) — binary is a convention, not a
+        requirement.
 
     Returns
     -------
-    mask : ndarray, shape (N_psf, N_psf), dtype uint8
-        Binary mask centred in the field of view. Pixels are ``0``
-        (outside pupil) or ``1`` (inside pupil).
+    mask : ndarray, shape (N_psf, N_psf), dtype float64
+        Mask centred in the field of view, values in ``{0, 1}`` if
+        ``binarize=True`` (default) or ``[0, 1]`` otherwise.
     N_pup_target : int or None
         Number of pixels the pupil spans after the geometric scaling, or
-        ``None`` when the mask was already on the PSF grid (no scaling
+        ``None`` when the mask was already on the working grid (no scaling
         was applied).
-
-    Notes
-    -----
-    The scaling comes from the well-known relationship between the Airy
-    radius in pixels and the physical parameters of the system:
-
-    .. math::
-        N_{pup}=\\frac{\\lambda f}{D\\,\\Delta_{det}}
-
-    where ``Delta_det`` is the detector pixel size (``detector_size / N_psf``).
 
     Raises
     ------
     ValueError
         If the PSF is not square, or if the required pupil diameter in
-        pixels is larger than the PSF matrix (you would need to zero-pad
-        the PSF beforehand).
+        pixels is larger than the PSF matrix — see
+        :func:`compute_pupil_footprint_px`.
     """
     N_psf = psf_shape[0]  # On suppose une matrice carrée (N_psf, N_psf)
     if psf_shape[0] != psf_shape[1]:
@@ -114,53 +261,102 @@ def load_and_prepare_mask(
 
     mask_raw = load_image(mask_path)
 
-    # Le masque simulé/pré-enregistré est déjà à la résolution de la PSF :
+    # Le masque simulé/pré-enregistré est déjà sur la grille de travail :
     # aucune mise à l'échelle physique n'est nécessaire.
     if mask_raw.shape == psf_shape:
-        mask = (mask_raw > 0.5).astype(np.uint8)
-        logger.debug("Masque déjà sur la grille de la PSF, resize ignoré.")
+        mask = (mask_raw > 0.5).astype(np.float64) if binarize else mask_raw.astype(np.float64)
+        logger.warning(
+            f"Masque déjà sur la grille de la PSF ({mask_raw.shape[0]}x{mask_raw.shape[1]}) : "
+            "mise à l'échelle physique ignorée — vérifier que c'est bien voulu "
+            "si le masque vient d'un autre outil (voir REFERENCE_TECHNIQUE.md §12)."
+        )
         return mask, None
 
-    # ---------------------------------------------------------------
-    # Nombre de pixels que doit occuper la pupille physique
-    # ---------------------------------------------------------------
-    # Airy-disk size in pixels (≈ λ f / (D Δdet))
-    airy_pixels = (wavelength * focal_length) / (pupil_diameter * detector_size)
-    N_pup_target = int(np.round(N_psf / airy_pixels))
-
-    if N_pup_target > N_psf:
-        raise ValueError(
-            f"Required pupil diameter ({N_pup_target} px) exceeds PSF size "
-            f"({N_psf} px). Pad the PSF (or use a larger detector) before "
-            "calling this function."
-        )
-
-    # ---------------------------------------------------------------
-    # Redimensionnement du masque à sa taille physique
-    # ---------------------------------------------------------------
-    mask_resized = resize(
-        mask_raw,
-        output_shape=(N_pup_target, N_pup_target),
-        order=0,  # nearest-neighbour → conserve les valeurs binaires
-        anti_aliasing=False,
-        preserve_range=True,
+    n_pup_target = compute_pupil_footprint_px(
+        N_psf, wavelength, focal_length, pupil_diameter, pixel_pitch, oversampling,
     )
 
-    # ---------------------------------------------------------------
-    # Zero-pad / centrage du masque redimensionné
-    # ---------------------------------------------------------------
-    mask = np.zeros((N_psf, N_psf), dtype=np.float64)
-    r_off = (N_psf - N_pup_target) // 2
-    c_off = (N_psf - N_pup_target) // 2
-    mask[r_off:r_off + N_pup_target, c_off:c_off + N_pup_target] = mask_resized
+    # Interpolation bilinéaire + anti-aliasing (plutôt que plus-proche-voisin
+    # sans anti-aliasing) : réduit les artefacts d'aliasing sur les
+    # structures fines (bras d'araignée) lors d'un sous-échantillonnage,
+    # avant un éventuel seuillage binaire.
+    mask = _resample_to_footprint(mask_raw, N_psf, n_pup_target, order=1, anti_aliasing=True)
+    if binarize:
+        mask = (mask > 0.5).astype(np.float64)
 
-    mask = (mask > 0.5).astype(np.uint8)
-
-    logger.debug(f"Mask sum (number of illuminated pixels): {int(mask.sum())}")
+    logger.debug(f"Mask sum (number of illuminated pixels): {float(mask.sum()):.1f}")
     logger.debug(f"Mask shape:   {mask.shape}")
-    logger.debug(f"N_pup_target: {N_pup_target}")
+    logger.debug(f"N_pup_target: {n_pup_target}")
 
-    return mask, N_pup_target
+    return mask, n_pup_target
+
+
+def load_and_prepare_ho_wfe(
+    psf_shape: Tuple[int, int],
+    ho_wfe_path: Union[str, Path],
+    wavelength: float,
+    focal_length: float,
+    pupil_diameter: float,
+    pixel_pitch: float,
+    oversampling: int = 1,
+) -> NDArray[np.float64]:
+    """
+    Load a known, fixed high-order (HO) WFE map [nm] at its own native
+    resolution, and register it onto the working grid — the same
+    footprint computation as :func:`load_and_prepare_mask`, so the two
+    end up co-registered even when their source files have different
+    native resolutions (e.g. a metrology tool's own grid vs. the pupil
+    mask's).
+
+    Unlike a pupil mask, a WFE map is a smooth, continuous physical
+    quantity — never binarised, and resampled with cubic interpolation
+    (``order=3``) rather than bilinear, for the least lossy reconstruction
+    of a smooth surface. See ``known_ho_wfe_nm`` on
+    :class:`backends.optimization.OpticalConfig`/
+    :class:`backends.phase_diversity.PhaseDiversityConfig` and §11.3/§12 of
+    ``REFERENCE_TECHNIQUE.md``.
+
+    Parameters
+    ----------
+    psf_shape : tuple[int, int]
+        Shape of the PSF image (must be square).
+    ho_wfe_path : str or pathlib.Path
+        Path to the raw WFE map [nm], at its own native resolution.
+    wavelength, focal_length, pupil_diameter, pixel_pitch, oversampling
+        See :func:`compute_pupil_footprint_px`. Must match the values
+        used for the accompanying :func:`load_and_prepare_mask` call, so
+        both land on the same footprint.
+
+    Returns
+    -------
+    NDArray
+        WFE map [nm], shape ``psf_shape``, registered on the working grid
+        (zero outside the aperture footprint).
+
+    Raises
+    ------
+    ValueError
+        If the PSF is not square, or if the required footprint exceeds
+        the grid size — see :func:`compute_pupil_footprint_px`.
+    """
+    N_psf = psf_shape[0]
+    if psf_shape[0] != psf_shape[1]:
+        raise ValueError(f"PSF must be square – received shape {psf_shape}")
+
+    ho_wfe_raw = load_image(ho_wfe_path)
+
+    if ho_wfe_raw.shape == psf_shape:
+        logger.warning(
+            f"Carte HO déjà sur la grille de la PSF ({ho_wfe_raw.shape[0]}x{ho_wfe_raw.shape[1]}) : "
+            "mise à l'échelle physique ignorée — vérifier que c'est bien voulu "
+            "(voir REFERENCE_TECHNIQUE.md §12)."
+        )
+        return ho_wfe_raw.astype(np.float64)
+
+    n_pup_target = compute_pupil_footprint_px(
+        N_psf, wavelength, focal_length, pupil_diameter, pixel_pitch, oversampling,
+    )
+    return _resample_to_footprint(ho_wfe_raw, N_psf, n_pup_target, order=3, anti_aliasing=True)
 
 
 def plot_array_plotly(

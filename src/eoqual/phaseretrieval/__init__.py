@@ -13,7 +13,7 @@ Public API
 >>> from eoqual.phaseretrieval import psf_to_wfe
 >>> coeffs_nm, phase_fit_nm, diagnostics = psf_to_wfe(
 ...     psf_path, mask_path, wavelength, focal_length, pupil_diameter,
-...     detector_size, method="phase_diversity", diversity_path=..., defocus=...,
+...     pixel_pitch, method="phase_diversity", diversity_path=..., defocus=...,
 ... )
 
 >>> from eoqual.phaseretrieval.runner import list_methods
