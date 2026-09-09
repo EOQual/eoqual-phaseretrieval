@@ -41,8 +41,13 @@ __copyright__ = "Copyright (c) 2026 Olivier Amram"
 from .config import METHODS_CONFIGS  # noqa: F401
 
 from .optics import build_zernike_basis, phase_from_coefficients, psf_from_phase  # noqa: F401
-from .zernike_fit import ZernikeConfig, fit_zernike, resolve_sign_ambiguity  # noqa: F401
-from .zernike_basis_orthogonal import ZernikeGramSchmidt  # noqa: F401
+from .zernike_fit import (  # noqa: F401
+    ZernikeConfig,
+    fit_zernike,
+    project_orthogonal_to_standard,
+    resolve_sign_ambiguity,
+)
+from .zernike_basis_orthogonal import ZernikeGramSchmidt, resolve_zernike_basis  # noqa: F401
 from .pupil import PupilGenerator  # noqa: F401
 from .diagnostics import (  # noqa: F401
     PSFMetrics,
@@ -70,8 +75,10 @@ __all__ = [
     "psf_from_phase",
     "ZernikeConfig",
     "fit_zernike",
+    "project_orthogonal_to_standard",
     "resolve_sign_ambiguity",
     "ZernikeGramSchmidt",
+    "resolve_zernike_basis",
     "PupilGenerator",
     "PSFMetrics",
     "airy_psf",

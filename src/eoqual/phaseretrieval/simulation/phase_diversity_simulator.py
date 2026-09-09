@@ -26,8 +26,9 @@ import numpy as np
 from numpy.typing import NDArray
 
 from ..backends.phase_diversity import diversity_phase
-from ..optics import build_zernike_basis, phase_from_coefficients, psf_from_phase
+from ..optics import phase_from_coefficients, psf_from_phase
 from ..pupil import PupilGenerator
+from ..zernike_basis_orthogonal import resolve_zernike_basis
 from .noise import DetectorNoiseConfig, apply_detector_noise
 from .psf_simulator import CoeffsInput, coeffs_to_array
 
@@ -51,6 +52,20 @@ class PhaseDiversitySimulationConfig:
     noise : DetectorNoiseConfig, optional
         Bruit détecteur (Poisson + lecture) appliqué aux deux images.
         ``None`` (défaut) : paire idéale, sans bruit.
+    orthogonal_basis : bool, default False
+        Si ``True``, les coefficients (aberration statique) sont
+        interprétés dans la base ré-orthogonalisée par Gram-Schmidt sur le
+        masque (§10 de ``REFERENCE_TECHNIQUE.md``) plutôt que la base de
+        Noll standard — à utiliser pour tester
+        ``PhaseDiversityConfig(orthogonal_basis=True)`` de façon cohérente
+        (même remarque que pour ``simulate_psf_from_zernike``). Le terme
+        de diversité (``defocus``) lui-même n'est pas affecté par ce
+        réglage : ``diversity_phase`` n'utilise que ``basis[3]``, et sur
+        un masque centrosymétrique la composante piston que Gram-Schmidt y
+        mélange n'a aucun effet sur la PSF (un piston global n'affecte pas
+        une intensité) — seul un masque *non* centrosymétrique (bras
+        d'araignée asymétriques) pourrait faire apparaître un léger
+        tip-tilt parasite dans ce terme, non pris en compte ici.
     """
 
     wavelength: float = 550e-9
@@ -58,6 +73,7 @@ class PhaseDiversitySimulationConfig:
     zernike_order: int = 15
     defocus: float = 275e-9
     noise: Optional[DetectorNoiseConfig] = None
+    orthogonal_basis: bool = False
 
 
 def simulate_phase_diversity_pair(
@@ -96,10 +112,19 @@ def simulate_phase_diversity_pair(
         - ``"psf_focus_truth"``, ``"psf_defocus_truth"`` : versions
           idéales sans bruit.
         - ``"mask"`` : masque pupillaire utilisé.
-        - ``"coeffs_nm"`` : coefficients de Zernike réellement appliqués
-          (tableau dense, longueur ``zernike_order``) — la vérité terrain
-          à comparer aux coefficients récupérés.
+        - ``"coeffs_nm"`` : coefficients réellement appliqués (tableau
+          dense, longueur ``zernike_order``, dans la base choisie via
+          ``cfg.orthogonal_basis``) — la vérité terrain à comparer aux
+          coefficients récupérés (ajustés avec le *même* réglage).
         - ``"defocus"``, ``"wavelength"`` : rappel des paramètres utilisés.
+        - ``"orthogonal_basis"`` : rappel du réglage utilisé.
+
+    Raises
+    ------
+    ValueError
+        Si ``cfg.orthogonal_basis=True`` et qu'au moins un mode d'indice ≤
+        ``cfg.zernike_order`` est linéairement dépendant des précédents
+        sur ce masque — voir :func:`resolve_zernike_basis`.
     """
     if mask is None:
         mask = PupilGenerator(cfg.npix).simple_disk()
@@ -107,7 +132,10 @@ def simulate_phase_diversity_pair(
     coeffs_arr_nm = coeffs_to_array(coeffs_nm, cfg.zernike_order)
     rad_to_nm = cfg.wavelength * 1e9 / (2.0 * np.pi)
 
-    basis = build_zernike_basis(npix=cfg.npix, nterms=cfg.zernike_order)
+    basis = resolve_zernike_basis(
+        npix=cfg.npix, nterms=cfg.zernike_order, mask=mask,
+        orthogonalize=cfg.orthogonal_basis,
+    )
     phase_rad = phase_from_coefficients(coeffs_arr_nm / rad_to_nm, basis, mask)
     diversity_rad = diversity_phase(basis, cfg.defocus, cfg.wavelength)
 
@@ -132,4 +160,5 @@ def simulate_phase_diversity_pair(
         "coeffs_nm": coeffs_arr_nm,
         "defocus": cfg.defocus,
         "wavelength": cfg.wavelength,
+        "orthogonal_basis": cfg.orthogonal_basis,
     }

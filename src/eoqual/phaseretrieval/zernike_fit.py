@@ -14,7 +14,7 @@ PSF (voir ``REFERENCE_TECHNIQUE.md``, §2 et §3.7).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 import numpy as np
 import poppy.zernike as zern
@@ -243,3 +243,80 @@ def resolve_sign_ambiguity(
         corrected[even] *= -1.0
 
     return corrected
+
+
+def project_orthogonal_to_standard(
+    coeffs_orthogonal_nm: NDArray[np.float64],
+    orthogonal_basis: NDArray[np.float64],
+    mask: NDArray[np.float64],
+    wavelength: float,
+    *,
+    order: Optional[int] = None,
+) -> Tuple[NDArray[np.float64], NDArray[np.float64], Dict[str, float]]:
+    """
+    Re-express Gram-Schmidt-basis coefficients on the standard Noll basis.
+
+    Any of the three retrieval methods can be run with
+    ``orthogonal_basis=True`` (§10 of ``REFERENCE_TECHNIQUE.md``) for a
+    well-conditioned fit on an obstructed pupil, but the resulting
+    coefficients are *not* directly labelled "defocus", "astigmatism",
+    etc. beyond the first couple of modes — the Gram-Schmidt basis mixes
+    standard modes together. This function converts back: it rebuilds the
+    phase map from ``coeffs_orthogonal_nm``/``orthogonal_basis`` and
+    re-decomposes it on the standard basis via :func:`fit_zernike`, which
+    is exact (up to floating-point/conditioning error) whenever the two
+    bases span the same subspace — i.e. no mode was dropped as degenerate
+    when ``orthogonal_basis`` was built (see
+    :func:`zernike_basis_orthogonal.resolve_zernike_basis`). This is
+    possible precisely because the Gram-Schmidt basis is, by
+    construction, a set of linear combinations of the standard Zernike
+    modes restricted to the mask (§10): the phase it represents lies
+    exactly in the span of the standard basis up to the same order, so a
+    linear re-fit onto that basis recovers it without approximation
+    (setting conditioning aside).
+
+    Parameters
+    ----------
+    coeffs_orthogonal_nm : NDArray
+        Coefficients in the orthogonal (Gram-Schmidt) basis, in nm WFE —
+        as returned by :func:`backends.optimization.fit_zernike_from_psf`,
+        :func:`backends.phase_diversity.fit_phase_diversity` or
+        :func:`fit_zernike`, called with ``orthogonal_basis=True``.
+    orthogonal_basis : NDArray
+        The actual basis array used for that fit — from
+        ``resolve_zernike_basis(npix, nterms, mask, orthogonalize=True)``
+        (same ``mask`` and ``nterms`` as the fit).
+    mask : NDArray
+        Binary pupil mask (must match the one used to build
+        ``orthogonal_basis``).
+    wavelength : float
+        Wavelength [m], for the rad -> nm conversion.
+    order : int, optional
+        Number of standard Zernike modes to re-fit. Defaults to
+        ``orthogonal_basis.shape[0]`` (same order as the original fit) —
+        the natural choice, since that is exactly the subspace the phase
+        lies in; a higher value cannot recover information that was never
+        fitted, and would only add unconstrained standard modes.
+
+    Returns
+    -------
+    coeffs_standard_nm : NDArray
+        Coefficients on the standard Noll basis, in nm WFE — the familiar
+        naming (:math:`Z_4` = defocus, :math:`Z_5, Z_6` = astigmatism, …).
+    phase_fit_nm : NDArray
+        Reconstructed phase map, in nm WFE (identical whichever basis it
+        is expressed in — only the coefficients change).
+    diagnostics : dict
+        Same fields as :func:`fit_zernike` — in particular
+        ``condition_number``, which quantifies how numerically fragile
+        this reprojection is on this mask (large on a heavily obstructed
+        pupil, where the standard basis is far from orthogonal — see §10).
+    """
+    rad_to_nm = wavelength * 1e9 / (2.0 * np.pi)
+    coeffs_rad = coeffs_orthogonal_nm / rad_to_nm
+    phase_rad = np.tensordot(coeffs_rad, orthogonal_basis, axes=(0, 0)) * mask
+
+    zern_cfg = ZernikeConfig(
+        order=order or orthogonal_basis.shape[0], wavelength=wavelength, orthogonal_basis=False,
+    )
+    return fit_zernike(phase_rad, mask, zern_cfg)

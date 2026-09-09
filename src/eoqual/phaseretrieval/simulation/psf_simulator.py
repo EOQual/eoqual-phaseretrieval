@@ -19,8 +19,9 @@ from typing import Dict, Optional, Union
 import numpy as np
 from numpy.typing import NDArray
 
-from ..optics import build_zernike_basis, phase_from_coefficients, psf_from_phase
+from ..optics import phase_from_coefficients, psf_from_phase
 from ..pupil import PupilGenerator
+from ..zernike_basis_orthogonal import resolve_zernike_basis
 from .noise import DetectorNoiseConfig, apply_detector_noise
 
 CoeffsInput = Union[Dict[int, float], NDArray[np.float64]]
@@ -79,6 +80,7 @@ def simulate_psf_from_zernike(
     zernike_order: int = 15,
     mask: Optional[NDArray[np.float64]] = None,
     noise: Optional[DetectorNoiseConfig] = None,
+    orthogonal_basis: bool = False,
 ) -> Dict[str, object]:
     """
     Simule une PSF diffraction-limitée avec une aberration de Zernike
@@ -88,9 +90,12 @@ def simulate_psf_from_zernike(
     Parameters
     ----------
     coeffs_nm : dict[int, float] or NDArray
-        Coefficients de Zernike (Noll), en nm WFE — voir
-        :func:`coeffs_to_array`. Exemple : ``{4: 55.0, 5: 27.5}`` pour un
-        défocus + astigmatisme connus, tous les autres modes à zéro.
+        Coefficients de Zernike, en nm WFE — voir :func:`coeffs_to_array`.
+        Exemple : ``{4: 55.0, 5: 27.5}`` pour un défocus + astigmatisme
+        connus, tous les autres modes à zéro. Base de Noll standard par
+        défaut ; base Gram-Schmidt de ``mask`` si ``orthogonal_basis=True``
+        (voir ce paramètre) — dans ce cas, seuls les tout premiers indices
+        gardent leur nom usuel (défocus, astigmatisme...).
     wavelength : float, default 550e-9
         Longueur d'onde [m].
     npix : int, default 256
@@ -104,6 +109,20 @@ def simulate_psf_from_zernike(
         Si fourni, un bruit détecteur réaliste (Poisson + lecture) est
         appliqué (voir :mod:`.noise`). Par défaut ``None`` : seule la PSF
         idéale est renvoyée (clé ``"psf"`` == ``"psf_truth"``).
+    orthogonal_basis : bool, default False
+        Si ``True``, ``coeffs_nm`` est interprété dans la base
+        ré-orthogonalisée par Gram-Schmidt sur ``mask``
+        (:func:`eoqual.phaseretrieval.zernike_basis_orthogonal.resolve_zernike_basis`,
+        §10 de ``REFERENCE_TECHNIQUE.md``) plutôt que la base de Noll
+        standard — à utiliser pour simuler un cas de test **cohérent**
+        avec un ajustement fait via ``orthogonal_basis=True`` côté
+        récupération de phase (``OpticalConfig``/``PhaseDiversityConfig``) :
+        comparer une vérité en base standard à des coefficients ajustés en
+        base Gram-Schmidt (ou l'inverse) donne des coefficients qui ne se
+        correspondent pas terme à terme (voir §10, et
+        :func:`eoqual.phaseretrieval.zernike_fit.project_orthogonal_to_standard`
+        pour reconvertir des coefficients Gram-Schmidt vers la base
+        standard après coup).
 
     Returns
     -------
@@ -113,10 +132,20 @@ def simulate_psf_from_zernike(
           ``psf_to_wfe`` / ``fit_zernike_from_psf`` / ``gerchberg_saxton``.
         - ``"psf_truth"`` : PSF idéale (sans bruit), énergie normalisée.
         - ``"mask"`` : masque pupillaire utilisé.
-        - ``"coeffs_nm"`` : coefficients de Zernike réellement appliqués
-          (tableau dense, longueur ``zernike_order``) — la vérité terrain
-          à comparer aux coefficients récupérés.
+        - ``"coeffs_nm"`` : coefficients réellement appliqués (tableau
+          dense, longueur ``zernike_order``, dans la base choisie via
+          ``orthogonal_basis``) — la vérité terrain à comparer aux
+          coefficients récupérés (ajustés avec le *même* réglage
+          ``orthogonal_basis``).
         - ``"wavelength"`` : longueur d'onde utilisée [m].
+        - ``"orthogonal_basis"`` : rappel du réglage utilisé.
+
+    Raises
+    ------
+    ValueError
+        Si ``orthogonal_basis=True`` et qu'au moins un mode d'indice ≤
+        ``zernike_order`` est linéairement dépendant des précédents sur ce
+        masque — voir :func:`resolve_zernike_basis`.
     """
     if mask is None:
         mask = PupilGenerator(npix).simple_disk()
@@ -124,7 +153,9 @@ def simulate_psf_from_zernike(
     coeffs_arr_nm = coeffs_to_array(coeffs_nm, zernike_order)
     rad_to_nm = wavelength * 1e9 / (2.0 * np.pi)
 
-    basis = build_zernike_basis(npix=npix, nterms=zernike_order)
+    basis = resolve_zernike_basis(
+        npix=npix, nterms=zernike_order, mask=mask, orthogonalize=orthogonal_basis,
+    )
     phase_rad = phase_from_coefficients(coeffs_arr_nm / rad_to_nm, basis, mask)
     psf_truth = psf_from_phase(phase_rad, mask)
 
@@ -136,4 +167,5 @@ def simulate_psf_from_zernike(
         "mask": mask,
         "coeffs_nm": coeffs_arr_nm,
         "wavelength": wavelength,
+        "orthogonal_basis": orthogonal_basis,
     }

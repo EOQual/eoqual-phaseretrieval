@@ -752,18 +752,64 @@ obstrué/sous-échantillonné pour `zernike_order`) : voir la docstring de
 **Mise en garde pour la comparaison à une vérité terrain.** Les
 coefficients obtenus avec `orthogonal_basis=True` ne sont *pas*
 directement comparables, indice par indice, à des coefficients de
-référence exprimés sur la base de Noll standard (ex. la vérité simulée
-par `eoqual.phaseretrieval.simulation`, qui utilise toujours la base
-standard) : même sous-espace de fonctions, mais une base différente au-delà
-des tout premiers modes (§ ci-dessus). Vérifié empiriquement sur une
-pupille annulaire à 30 % d'obstruction : la même PSF simulée, ajustée
-avec `orthogonal_basis=True`, donne une corrélation ≈ 0,99 (au lieu de
-1,00 en base standard) avec la vérité *exprimée en base standard* — pas
-une régression de la méthode, un effet de changement de base (et de
-convergence du solveur, le coût final y étant aussi moins bon). Pour un
-test de bout en bout rigoureux avec cette option, décomposer la vérité
-terrain dans la *même* base orthogonalisée (`ZernikeGramSchmidt.decompose`)
-avant de comparer, plutôt que dans la base standard.
+référence exprimés sur la base de Noll standard : même sous-espace de
+fonctions, mais une base différente au-delà des tout premiers modes
+(§ ci-dessus). Vérifié empiriquement sur une pupille annulaire à 30 %
+d'obstruction : la même PSF simulée en base standard, ajustée avec
+`orthogonal_basis=True`, donne une corrélation ≈ 0,99 (au lieu de 1,00 en
+base standard) avec la vérité *exprimée en base standard* — pas une
+régression de la méthode, un effet de changement de base (et de
+convergence du solveur, le coût final y étant aussi moins bon).
+
+### 10.1 Simulation cohérente avec `orthogonal_basis`
+
+`eoqual.phaseretrieval.simulation` accepte désormais le même réglage
+`orthogonal_basis` (`simulate_psf_from_zernike(..., orthogonal_basis=True)`,
+`PhaseDiversitySimulationConfig(orthogonal_basis=True)`) : les
+coefficients de vérité terrain sont alors interprétés dans la base
+Gram-Schmidt de `mask`, via le même `resolve_zernike_basis` que les
+backends — plus besoin de la décomposition manuelle suggérée dans une
+version antérieure de cette section. Simuler et ajuster avec le même
+réglage rétablit une comparaison directe et quasi exacte (corrélation
+`> 0,9999`, coût `< 1e-15` sans bruit, `tests/test_simulation_orthogonal.py`)
+— y compris pour `"phase_diversity"` : le terme de diversité
+(`defocus`) n'est pas affecté par ce réglage, `diversity_phase` n'utilisant
+que `basis[3]`, dont la composante piston éventuellement mélangée par
+Gram-Schmidt n'a aucun effet sur la PSF (un piston global n'affecte pas
+une intensité) — sur un masque centrosymétrique (§3.7). Un masque *non*
+centrosymétrique (bras d'araignée asymétriques) pourrait en revanche
+laisser fuir un peu de tip-tilt dans ce terme, non pris en compte ici.
+
+### 10.2 Revenir à la base standard pour l'interprétation
+
+`zernike_fit.project_orthogonal_to_standard(coeffs_orthogonal_nm,
+orthogonal_basis, mask, wavelength)` reconvertit des coefficients ajustés
+en base Gram-Schmidt vers la base de Noll standard (Z4 = défocus,
+Z5/Z6 = astigmatisme, …) pour l'interprétation et le reporting — la
+conversion inverse de §10.1. Elle reconstruit la phase à partir des
+coefficients Gram-Schmidt puis la redécompose sur la base standard via
+`fit_zernike`, une opération **linéaire exacte** (aux erreurs de
+conditionnement/convergence en amont près) puisque la base Gram-Schmidt
+n'est, par construction, qu'une combinaison linéaire des modes standard
+jusqu'au même ordre (§10) : la phase qu'elle représente est donc
+exactement dans l'espace couvert par la base standard.
+
+Point à connaître avant d'interpréter le résultat : sur un masque obstrué,
+un mode Gram-Schmidt d'indice `j` peut mélanger un peu de **piston** (Z1)
+au mode standard homonyme (vérifié empiriquement : le mode Gram-Schmidt
+« 4 » de l'exemple ci-dessus vaut `-0,196·Z1 + 1,269·Z4`, jamais de
+tip-tilt sur un masque centrosymétrique — même argument de symétrie qu'en
+§3.7). Cette part de piston est perdue lors de la reprojection (retirée
+par `fit_zernike`, comme partout ailleurs dans ce projet — Z1-Z3 non
+observables sans référence externe), ce qui explique un léger décalage
+d'amplitude entre le coefficient Gram-Schmidt d'origine et son équivalent
+standard reprojeté (`+27 %` dans l'exemple ci-dessus, `55 nm` en base
+Gram-Schmidt devenant `69,8 nm` de Z4 standard) : rien d'anormal, la
+vérité terrain elle-même n'a de sens que dans la base où elle a été
+définie. Utiliser plutôt `project_orthogonal_to_standard` pour retrouver
+une vérité pensée nativement en base standard (aberration physique connue)
+après un ajustement fait en base Gram-Schmidt (`tests/test_simulation_orthogonal.py`,
+`test_project_orthogonal_to_standard_recovers_standard_truth_approximately`).
 
 ---
 

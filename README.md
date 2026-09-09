@@ -109,8 +109,16 @@ pair = simulate_phase_diversity_pair({4: 55.0, 5: 27.5}, cfg)
 pair["psf_focus"], pair["psf_defocus"], pair["coeffs_nm"]
 ```
 
-Voir `tests/test_simulation_roundtrip.py` pour des exemples complets
-(simulation → récupération de phase → comparaison à la vérité terrain) et
+`orthogonal_basis=True` (voir [REFERENCE_TECHNIQUE.md](REFERENCE_TECHNIQUE.md)
+§10) est aussi disponible côté simulation, pour tester de façon cohérente
+un ajustement fait avec `orthogonal_basis=True` sur une pupille obstruée —
+et `zernike_fit.project_orthogonal_to_standard` reconvertit après coup des
+coefficients ajustés en base Gram-Schmidt vers la base standard (Z4 =
+défocus, …) pour l'interprétation.
+
+Voir `tests/test_simulation_roundtrip.py`/`tests/test_simulation_orthogonal.py`
+pour des exemples complets (simulation → récupération de phase →
+comparaison à la vérité terrain) et
 [REFERENCE_TECHNIQUE.md](REFERENCE_TECHNIQUE.md) §6.4/§9 pour la
 discussion du modèle de bruit.
 

@@ -40,6 +40,17 @@
         jusqu'ici non branché) plutôt que la base de Noll standard —
         recommandé pour une pupille obstruée. `False` par défaut,
         comportement historique inchangé.
+    -   `eoqual.phaseretrieval.simulation` étendu à `orthogonal_basis`
+        (`simulate_psf_from_zernike`, `PhaseDiversitySimulationConfig`) :
+        génère une vérité terrain directement dans la base Gram-Schmidt du
+        masque, pour valider `orthogonal_basis=True` de bout en bout sans
+        le biais de changement de base identifié à l'introduction de cette
+        option (`tests/test_simulation_orthogonal.py`).
+    -   `zernike_fit.project_orthogonal_to_standard` : reconvertit des
+        coefficients ajustés en base Gram-Schmidt vers la base de Noll
+        standard (Z4 = défocus, …) pour l'interprétation — conversion
+        linéaire exacte (aux erreurs de conditionnement/convergence en
+        amont près), voir REFERENCE_TECHNIQUE.md §10.2.
 
 ## Évolutions futures
 
