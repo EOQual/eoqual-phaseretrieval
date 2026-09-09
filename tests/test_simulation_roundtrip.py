@@ -109,3 +109,25 @@ def test_phase_diversity_recovers_truth_with_realistic_noise():
     # Régime bruité : tolérance plus large qu'en l'absence de bruit, mais
     # toujours le bon signe et une reconstruction qualitativement correcte.
     assert _corr(coeffs_nm[3:], pair["coeffs_nm"][3:]) > 0.8
+
+
+def test_optimization_runs_on_noisy_psf_with_negative_pixels():
+    """
+    Régression : le bruit de lecture (gaussien additif,
+    ``DetectorNoiseConfig``) peut pousser des pixels sous zéro — une PSF
+    "mesurée" réelle après soustraction de fond peut en faire autant.
+    ``residuals()`` doit clipper avant la racine carrée (comme
+    ``gerchberg_saxton`` le fait déjà pour sa cible d'amplitude) plutôt que
+    de planter dans ``least_squares`` ("Residuals are not finite").
+    """
+    sim = simulate_psf_from_zernike(
+        TRUTH_NM, wavelength=WAVELENGTH, npix=NPIX, zernike_order=ZERNIKE_ORDER,
+        noise=DetectorNoiseConfig(photon_count=1e6, read_noise_e=5.0, seed=0),
+    )
+    assert (sim["psf"] < 0).any()  # confirme que ce cas de test est bien piégeux
+
+    cfg = OpticalConfig(wavelength=WAVELENGTH, zernike_order=ZERNIKE_ORDER, verbose=False)
+    coeffs_nm, diagnostics = fit_zernike_from_psf(sim["psf"], sim["mask"], cfg)
+
+    assert np.all(np.isfinite(coeffs_nm))
+    assert _corr(coeffs_nm[3:], sim["coeffs_nm"][3:]) > 0.8

@@ -65,6 +65,25 @@
         recouvrée exactement. Ignorée (avec avertissement) pour
         `"gerchberg_saxton"`. `eoqual.phaseretrieval.simulation` accepte le
         même paramètre pour générer des cas de test correspondants.
+    -   Correctif de robustesse : `backends.optimization.residuals` clippe
+        désormais `measured_psf` à des valeurs non négatives avant la
+        racine carrée (comme le fait déjà `gerchberg_saxton` pour sa cible
+        d'amplitude) — une PSF bruitée réaliste (bruit de lecture gaussien,
+        `simulation.noise.DetectorNoiseConfig`) peut contenir des pixels
+        légèrement négatifs, ce qui faisait auparavant échouer
+        `least_squares` ("Residuals are not finite"). Découvert en
+        exécutant `examples/psf2zernike_demo.ipynb` de bout en bout ;
+        régression couverte par
+        `tests/test_simulation_roundtrip.py::test_optimization_runs_on_noisy_psf_with_negative_pixels`.
+    -   `examples/psf2zernike_demo.ipynb` : références obsolètes corrigées
+        (chemins de module `retrieval_*.py`/`pipeline.py` pré-réorganisation
+        en paquet, restées dans des cellules de prose depuis le transfert
+        initial) et nouvelle section « Fonctionnalités avancées »
+        démontrant le module de simulation en mémoire, `orthogonal_basis` +
+        `project_orthogonal_to_standard`, et `known_ho_wfe_nm` — les trois
+        n'étaient jusqu'ici couverts par aucun exemple exécutable. Les deux
+        notebooks (`examples/*.ipynb`) sont ré-exécutés de bout en bout
+        (aucune erreur) pour valider l'ensemble.
 
 ## Évolutions futures
 

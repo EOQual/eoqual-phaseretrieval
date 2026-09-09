@@ -140,13 +140,25 @@ def residuals(
     -------
     NDArray
         Flattened residual vector (amplitude domain: ``sqrt`` of the PSF).
+
+    Notes
+    -----
+    ``measured_psf`` is clipped to non-negative before the square root —
+    a real (or realistically simulated, e.g.
+    :func:`eoqual.phaseretrieval.simulation.noise.apply_detector_noise`)
+    acquisition can carry slightly negative pixels (read noise, background
+    subtraction) that would otherwise make ``least_squares`` fail outright
+    (``sqrt`` of a negative number). Same precaution already taken in
+    :func:`backends.gerchberg_saxton.gerchberg_saxton`'s target amplitude.
+    ``model_psf`` needs no such clipping: it is ``|FFT|**2`` by
+    construction (:func:`optics.psf_from_phase`), always non-negative.
     """
     phase = phase_from_coefficients(coeffs_rad, basis, mask)
     if known_phase_rad is not None:
         phase = phase + known_phase_rad
     model_psf = psf_from_phase(phase, mask)
 
-    residual = np.sqrt(model_psf) - np.sqrt(measured_psf)
+    residual = np.sqrt(model_psf) - np.sqrt(np.maximum(measured_psf, 0.0))
     if weight is not None:
         residual = residual * np.sqrt(weight)
 
