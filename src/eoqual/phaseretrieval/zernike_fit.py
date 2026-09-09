@@ -3,12 +3,12 @@
 """
 Décomposition d'une carte de phase sur la base de Zernike (ordre de Noll).
 
-Utilisé par la méthode Gerchberg-Saxton (``retrieval_gs``) pour convertir
-la phase pupillaire retrouvée itérativement en coefficients de Zernike.
+Utilisé par la méthode Gerchberg-Saxton (``backends.gerchberg_saxton``) pour convertir
+la phase pupillaire récupérée itérativement en coefficients de Zernike.
 
 Ce module contient aussi :func:`resolve_sign_ambiguity`, un correctif de
-l'ambiguïté de signe inhérente au retrouvé de phase à partir d'une seule
-PSF (voir ``phase_retrieval_and_diversity.md``, §2 et §3.7).
+l'ambiguïté de signe inhérente à la récupération de phase à partir d'une seule
+PSF (voir ``REFERENCE_TECHNIQUE.md``, §2 et §3.7).
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ import numpy as np
 import poppy.zernike as zern
 from numpy.typing import NDArray
 
-from .optics import build_zernike_basis
+from .zernike_basis_orthogonal import resolve_zernike_basis
 
 
 @dataclass(slots=True)
@@ -34,9 +34,20 @@ class ZernikeConfig:
         Number of Zernike modes to fit (Noll ordering), default 36.
     wavelength : float
         Central wavelength in metres, used for the rad → nm conversion.
+    orthogonal_basis : bool, default False
+        If True, project onto a basis re-orthogonalised (Gram-Schmidt) on
+        the actual pupil mask (see
+        :func:`zernike_basis_orthogonal.resolve_zernike_basis`, §10 of
+        ``REFERENCE_TECHNIQUE.md``) instead of the standard Noll basis.
+        Recommended whenever the pupil is not a full, unobstructed disc
+        (central obstruction, spiders) — the standard basis is not
+        orthogonal there, which degrades ``condition_number`` and mixes
+        the physical meaning of each coefficient. ``False`` (default)
+        keeps the historical behaviour unchanged.
     """
     order: int = 36
     wavelength: float = 550e-9
+    orthogonal_basis: bool = False
 
 
 def fit_zernike(
@@ -83,8 +94,12 @@ def fit_zernike(
     # Ensure phase is only defined inside pupil
     phase_rad = phase_rad * pupil_mask
 
-    # Build Zernike basis (Noll ordering)
-    basis = build_zernike_basis(npix=npix, nterms=zern_cfg.order)
+    # Build Zernike basis (Noll ordering, or Gram-Schmidt-orthogonalised on
+    # this mask if zern_cfg.orthogonal_basis — see ZernikeConfig docstring).
+    basis = resolve_zernike_basis(
+        npix=npix, nterms=zern_cfg.order, mask=pupil_mask,
+        orthogonalize=zern_cfg.orthogonal_basis,
+    )
 
     # Design matrix
     A = np.column_stack([mode[inside] for mode in basis])
@@ -184,15 +199,15 @@ def resolve_sign_ambiguity(
     This only corrects the physical twin-image ambiguity. It does **not**
     fix a solver that failed to converge to either exact branch (check
     ``diagnostics["cost"]`` / ``"residual_rms_nm"`` first — see the
-    "Gerchberg-Saxton" caveat in ``phase_retrieval_and_diversity.md``, §3.7).
+    "Gerchberg-Saxton" caveat in ``REFERENCE_TECHNIQUE.md``, §3.7).
 
     Parameters
     ----------
     coeffs_nm : NDArray
         Zernike coefficients (Noll order), as returned by
-        :func:`fit_zernike`, :func:`retrieval_optimization.fit_zernike_from_psf`
+        :func:`fit_zernike`, :func:`backends.optimization.fit_zernike_from_psf`
         or (for reference only — see caveat above)
-        :func:`retrieval_gs.gerchberg_saxton` + :func:`fit_zernike`.
+        :func:`backends.gerchberg_saxton.gerchberg_saxton` + :func:`fit_zernike`.
     reference_index : int, default 4
         Noll index (1-based) of the even-``m`` mode whose sign is known a
         priori. Must itself have an even azimuthal frequency (the default,

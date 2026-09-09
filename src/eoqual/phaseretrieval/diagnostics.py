@@ -7,8 +7,8 @@ radial, MTF et ellipticité du cœur.
 Complète les diagnostics déjà produits par le fit Zernike lui-même
 (:mod:`zernike_fit`) avec des métriques indépendantes du modèle Zernike —
 utiles en particulier pour un premier diagnostic visuel/quantitatif *avant*
-de lancer une méthode de retrouvé de phase (§1 et nouvelle §9 de
-``phase_retrieval_and_diversity.md``), ou pour comparer plusieurs méthodes
+de lancer une méthode de récupération de phase (§1 et nouvelle §9 de
+``REFERENCE_TECHNIQUE.md``), ou pour comparer plusieurs méthodes
 entre elles sur un pied d'égalité.
 
 Origine : portage, adapté au style et aux conventions de ce projet
@@ -118,7 +118,7 @@ def strehl_ratio(
     The Strehl ratio only depends on the peak values, not on any spatial
     shift between the two PSF. It is only meaningful if both PSF share the
     same normalisation convention (e.g. both sum to 1), the same pixel
-    scale, and the same spectral band — see ``phase_retrieval_and_diversity.md``
+    scale, and the same spectral band — see ``REFERENCE_TECHNIQUE.md``
     §9 for the full list of conditions and the Maréchal quality table.
 
     A ratio significantly above 1 is not physically possible for a
@@ -336,7 +336,7 @@ def diagnose_aberration(metrics: PSFMetrics) -> str:
     str
         A short human-readable diagnosis. **Heuristic only** — always
         confirm with an actual Zernike fit (:mod:`zernike_fit`,
-        :mod:`retrieval_optimization`, :mod:`retrieval_phase_diversity`)
+        :mod:`backends.optimization`, :mod:`backends.phase_diversity`)
         before drawing conclusions.
     """
     if metrics.first_ring_ratio > 0.25 and metrics.ellipticity < 0.05:

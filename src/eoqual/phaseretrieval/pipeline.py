@@ -3,7 +3,7 @@
 """
 Point d'entrée unifié : PSF (+ masque pupillaire) -> coefficients de Zernike.
 
-Ce module orchestre les trois méthodes de retrouvé de phase implémentées
+Ce module orchestre les trois méthodes de récupération de phase implémentées
 dans ce projet, sélectionnables via le paramètre ``method`` de
 :func:`psf_to_wfe` :
 
@@ -22,7 +22,7 @@ direct. La diversité de phase, elle, a besoin d'une **seconde** PSF
 juste une variante d'algorithme, c'est un protocole de mesure différent.
 Elle est donc bien orchestrée ici (un seul point d'entrée, un seul CLI,
 diagnostics communs) mais son coeur numérique reste dans son propre module
-(:mod:`retrieval_phase_diversity`), avec sa propre configuration ; le
+(:mod:`backends.phase_diversity`), avec sa propre configuration ; le
 paramètre ``diversity_path`` est explicitement optionnel et ignoré (avec
 avertissement) par les deux autres méthodes.
 """
@@ -41,7 +41,8 @@ from loguru import logger
 from numpy.typing import NDArray
 
 from .io_utils import load_and_prepare_mask, load_image, visualisation_diagnostics
-from .optics import build_zernike_basis, phase_from_coefficients
+from .optics import phase_from_coefficients
+from .zernike_basis_orthogonal import resolve_zernike_basis
 from .backends.gerchberg_saxton import RetrievalConfig, gerchberg_saxton
 from .backends.optimization import OpticalConfig, fit_zernike_from_psf
 from .backends.phase_diversity import PhaseDiversityConfig, fit_phase_diversity
@@ -60,6 +61,7 @@ def psf_to_wfe(
     detector_size: float,
     method: Method = "gerchberg_saxton",
     zernike_order: int = 36,
+    orthogonal_basis: bool = False,
     verbose: bool = True,
     # --- Gerchberg-Saxton ---
     max_iter: int = 200,
@@ -96,13 +98,20 @@ def psf_to_wfe(
         Phase-retrieval algorithm to use.
     zernike_order : int, default 36
         Number of Zernike modes (Noll order) to fit.
+    orthogonal_basis : bool, default False
+        Fit on a Gram-Schmidt basis orthogonalised on the actual pupil
+        mask (see :class:`zernike_fit.ZernikeConfig` and §10 of
+        ``REFERENCE_TECHNIQUE.md``) instead of the standard Noll basis —
+        recommended whenever the pupil is not a full, unobstructed disc
+        (central obstruction, spiders). ``False`` (default) keeps the
+        historical behaviour, for all three methods.
     verbose : bool, default True
         Print progress / solver traces and display Plotly diagnostics.
     max_iter : int
         [gerchberg_saxton] Number of GS iterations.
     beta : float
         [gerchberg_saxton] Reserved relaxation factor (see
-        :class:`retrieval_gs.RetrievalConfig`).
+        :class:`backends.gerchberg_saxton.RetrievalConfig`).
     seed : int, optional
         [gerchberg_saxton] Seed for the random pupil-phase initialisation
         (reproducible runs). ``None`` draws a fresh random start each call.
@@ -130,7 +139,7 @@ def psf_to_wfe(
         (typically ``(4, +1.0)`` for a known defocus direction), used to
         resolve the sign ambiguity inherent to single-PSF phase retrieval
         (see :func:`zernike_fit.resolve_sign_ambiguity` for the theory and
-        ``phase_retrieval_and_diversity.md`` §3.7). Ignored (with a warning)
+        ``REFERENCE_TECHNIQUE.md`` §3.7). Ignored (with a warning)
         for ``"phase_diversity"``, which is already unambiguous.
 
     Returns
@@ -185,7 +194,9 @@ def psf_to_wfe(
         phase_rad = gerchberg_saxton(psf, mask, retrieval_cfg)
         phase_nm = phase_rad * rad_to_nm
 
-        zern_cfg = ZernikeConfig(order=zernike_order, wavelength=wavelength)
+        zern_cfg = ZernikeConfig(
+            order=zernike_order, wavelength=wavelength, orthogonal_basis=orthogonal_basis,
+        )
         coeffs_nm, phase_fit_nm, diagnostics = fit_zernike(phase_rad, mask, zern_cfg)
 
     elif method == "optimization":
@@ -195,10 +206,13 @@ def psf_to_wfe(
             fit_piston_tilt=fit_piston_tilt,
             max_nfev=max_nfev,
             verbose=verbose,
+            orthogonal_basis=orthogonal_basis,
         )
         coeffs_nm, diagnostics = fit_zernike_from_psf(psf, mask, opt_cfg)
 
-        basis = build_zernike_basis(npix=N_psf, nterms=zernike_order)
+        basis = resolve_zernike_basis(
+            npix=N_psf, nterms=zernike_order, mask=mask, orthogonalize=orthogonal_basis,
+        )
         phase_fit_nm = phase_from_coefficients(coeffs_nm / rad_to_nm, basis, mask) * rad_to_nm
 
     else:  # method == "phase_diversity"
@@ -219,10 +233,13 @@ def psf_to_wfe(
             poisson_weighting=poisson_weighting,
             max_nfev=max_nfev,
             verbose=verbose,
+            orthogonal_basis=orthogonal_basis,
         )
         coeffs_nm, diagnostics = fit_phase_diversity(psf, psf_defocus, mask, pd_cfg)
 
-        basis = build_zernike_basis(npix=N_psf, nterms=zernike_order)
+        basis = resolve_zernike_basis(
+            npix=N_psf, nterms=zernike_order, mask=mask, orthogonalize=orthogonal_basis,
+        )
         phase_fit_nm = phase_from_coefficients(coeffs_nm / rad_to_nm, basis, mask) * rad_to_nm
 
     # ------------------------------------------------------------------
@@ -238,7 +255,9 @@ def psf_to_wfe(
             coeffs_nm = resolve_sign_ambiguity(
                 coeffs_nm, reference_index=reference_index, expected_sign=expected_sign
             )
-            basis = build_zernike_basis(npix=N_psf, nterms=zernike_order)
+            basis = resolve_zernike_basis(
+                npix=N_psf, nterms=zernike_order, mask=mask, orthogonalize=orthogonal_basis,
+            )
             phase_fit_nm = phase_from_coefficients(coeffs_nm / rad_to_nm, basis, mask) * rad_to_nm
 
     diagnostics = {"method": method, **diagnostics}
@@ -285,6 +304,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pupil_diameter", type=float, default=0.5, help="Pupil diameter in metres")
     parser.add_argument("--detector_size", type=float, default=4e-6, help="Detector size in metres")
     parser.add_argument("--zernike_order", type=int, default=36, help="Maximum Zernike Noll order")
+    parser.add_argument(
+        "--orthogonal_basis", action="store_true",
+        help="Fit on a Gram-Schmidt basis re-orthogonalised on the actual "
+             "pupil mask instead of the standard Noll basis (recommended "
+             "for an obstructed pupil: central obstruction, spiders).",
+    )
     parser.add_argument("--max_iter", type=int, default=200, help="[gerchberg_saxton] Number of GS iterations")
     parser.add_argument("--beta", type=float, default=0.9, help="[gerchberg_saxton] Relaxation factor")
     parser.add_argument("--seed", type=int, default=None, help="[gerchberg_saxton] RNG seed (reproducible runs)")
@@ -356,6 +381,7 @@ def main() -> None:
             "pupil_diameter": args.pupil_diameter,
             "detector_size": args.detector_size,
             "zernike_order": args.zernike_order,
+            "orthogonal_basis": args.orthogonal_basis,
             "max_iter": args.max_iter,
             "beta": args.beta,
             "seed": args.seed,
@@ -388,6 +414,7 @@ def main() -> None:
         detector_size=proc_param["detector_size"],
         method=proc_param["method"],
         zernike_order=proc_param["zernike_order"],
+        orthogonal_basis=proc_param["orthogonal_basis"],
         max_iter=proc_param["max_iter"],
         beta=proc_param["beta"],
         seed=proc_param["seed"],

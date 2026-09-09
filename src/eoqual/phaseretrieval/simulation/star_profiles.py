@@ -6,7 +6,7 @@ avec intégration correcte sur le pixel et assemblage Bayer RGGB.
 
 Complète le simulateur physique (Zernike + FFT) de ``simu_psf_mask.ipynb`` :
 là où celui-ci simule une PSF *diffraction-limitée avec aberrations
-connues* (nécessaire pour valider un retrouvé de phase, puisque la vérité
+connues* (nécessaire pour valider une récupération de phase, puisque la vérité
 terrain doit être exprimable en coefficients de Zernike), ce module simule
 une étoile par un profil d'intensité empirique simple — utile pour tester
 rapidement la mécanique de la mosaïque Bayer, un estimateur de décalage
@@ -202,7 +202,7 @@ def psf_from_pupil_field_wavelength_scaled(
     input refines the FFT's angular pixel scale exactly enough to
     compensate the larger physical Airy radius at longer wavelengths, and
     symmetrically for cropping at shorter ones — see
-    ``phase_retrieval_and_diversity.md`` §6 (note sur le simulateur Bayer)
+    ``REFERENCE_TECHNIQUE.md`` §6 (note sur le simulateur Bayer)
     for the derivation.
 
     Raises

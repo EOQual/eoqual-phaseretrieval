@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Retrouvé de phase par optimisation directe (moindres carrés non-linéaires).
+Récupération de phase par optimisation directe (moindres carrés non-linéaires).
 
 Contrairement à Gerchberg-Saxton, les coefficients de Zernike sont ajustés
 *directement* de façon à ce que la PSF simulée reproduise la PSF mesurée,
-sans étape intermédiaire de retrouvé de phase pixel-à-pixel. Une seule PSF
+sans étape intermédiaire de récupération de phase pixel-à-pixel. Une seule PSF
 en entrée.
 """
 
@@ -18,7 +18,8 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.optimize import least_squares
 
-from ..optics import build_zernike_basis, phase_from_coefficients, psf_from_phase
+from ..optics import phase_from_coefficients, psf_from_phase
+from ..zernike_basis_orthogonal import resolve_zernike_basis
 
 
 @dataclass(slots=True)
@@ -50,6 +51,12 @@ class OpticalConfig:
         when the fit is under-constrained (e.g. high ``zernike_order`` with
         a noisy or low-flux PSF). ``0.0`` (default) disables it, reproducing
         the original unregularised fit.
+    orthogonal_basis : bool, default False
+        Fit on a Gram-Schmidt basis orthogonalised on the actual mask
+        (see :class:`zernike_fit.ZernikeConfig` and §10 of
+        ``REFERENCE_TECHNIQUE.md``) instead of the standard Noll basis —
+        recommended for an obstructed pupil (central obstruction,
+        spiders). ``False`` (default) keeps the historical behaviour.
     """
     wavelength: float = 550e-9
     zernike_order: int = 36
@@ -58,6 +65,7 @@ class OpticalConfig:
     verbose: bool = True
     core_weight_radius: Optional[float] = None
     l2_reg: float = 0.0
+    orthogonal_basis: bool = False
 
 
 def _core_weight(shape: Tuple[int, int], radius: float) -> NDArray[np.float64]:
@@ -151,7 +159,10 @@ def fit_zernike_from_psf(
         Optimisation diagnostics: final cost, number of function
         evaluations, solver status message and PSF-domain RMSE.
     """
-    basis = build_zernike_basis(npix=psf.shape[0], nterms=cfg.zernike_order)
+    basis = resolve_zernike_basis(
+        npix=psf.shape[0], nterms=cfg.zernike_order, mask=mask,
+        orthogonalize=cfg.orthogonal_basis,
+    )
 
     if cfg.fit_piston_tilt:
         active = np.arange(cfg.zernike_order)

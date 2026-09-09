@@ -3,9 +3,9 @@
 """
 Modèle optique direct : base de Zernike, synthèse de phase et PSF.
 
-Fonctions purement numériques, partagées par les méthodes de retrouvé de
-phase basées sur une optimisation (``retrieval_optimization``,
-``retrieval_phase_diversity``).
+Fonctions purement numériques, partagées par les méthodes de récupération
+de phase basées sur une optimisation (``backends.optimization``,
+``backends.phase_diversity``).
 """
 
 from __future__ import annotations

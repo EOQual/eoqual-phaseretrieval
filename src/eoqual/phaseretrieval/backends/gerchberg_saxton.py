@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Retrouvé de phase itératif par l'algorithme de Gerchberg-Saxton (GS).
+Récupération de phase itérative par l'algorithme de Gerchberg-Saxton (GS).
 
 Ne nécessite qu'une seule PSF et le masque pupillaire binaire. La phase
-pupillaire est retrouvée par projections successives entre plan pupille et
+pupillaire est récupérée par projections successives entre plan pupille et
 plan focal ; elle doit ensuite être décomposée sur la base de Zernike
 (voir :mod:`zernike_fit`) pour obtenir des coefficients.
 

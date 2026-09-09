@@ -12,7 +12,7 @@ volontairement introduit — exactement le protocole de mesure décrit au
 :func:`eoqual.phaseretrieval.backends.phase_diversity.diversity_phase`
 pour construire la phase de diversité, afin que le défocus simulé ici
 suive exactement la même convention (unités, signe) que celle attendue
-par ``PhaseDiversityConfig.defocus`` côté retrouvé de phase — un
+par ``PhaseDiversityConfig.defocus`` côté récupération de phase — un
 ``defocus`` simulé peut donc être réinjecté tel quel dans
 ``fit_phase_diversity`` pour une validation de bout en bout.
 """
@@ -98,7 +98,7 @@ def simulate_phase_diversity_pair(
         - ``"mask"`` : masque pupillaire utilisé.
         - ``"coeffs_nm"`` : coefficients de Zernike réellement appliqués
           (tableau dense, longueur ``zernike_order``) — la vérité terrain
-          à comparer aux coefficients retrouvés.
+          à comparer aux coefficients récupérés.
         - ``"defocus"``, ``"wavelength"`` : rappel des paramètres utilisés.
     """
     if mask is None:

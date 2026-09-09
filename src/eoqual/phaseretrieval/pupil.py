@@ -5,7 +5,7 @@ Génération de masques de pupille : disque simple, pupille annulaire
 (obstruction centrale) et pupille avec bras d'araignée.
 
 Complète [`zernike_basis_orthogonal.py`](zernike_basis_orthogonal.py) (§10
-de ``phase_retrieval_and_diversity.md``) : ce module génère les pupilles
+de ``REFERENCE_TECHNIQUE.md``) : ce module génère les pupilles
 non standard sur lesquelles la base de Zernike doit être ré-orthogonalisée,
 plutôt que de les construire à la main à chaque fois.
 """
@@ -83,7 +83,7 @@ class PupilGenerator:
         -------
         NDArray
             Masque binaire. C'est le cas d'usage typique du §10 de
-            ``phase_retrieval_and_diversity.md`` : la base de Zernike
+            ``REFERENCE_TECHNIQUE.md`` : la base de Zernike
             standard n'est plus orthogonale sur cette pupille (les bras
             brisent la symétrie azimutale) — utiliser
             :class:`zernike_basis_orthogonal.ZernikeGramSchmidt` pour la

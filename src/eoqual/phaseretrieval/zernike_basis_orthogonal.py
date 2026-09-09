@@ -7,7 +7,7 @@ Les polynômes de Zernike (base ``poppy.zernike.zernike_basis`` utilisée par
 :mod:`optics`) ne sont orthogonaux que sur une pupille circulaire **pleine,
 non obstruée**. Pour une pupille réelle (obstruction centrale, bras
 d'araignée — le cas typique en télédétection, voir
-``phase_retrieval_and_diversity.md`` §8.1) cette base n'est plus
+``REFERENCE_TECHNIQUE.md`` §8.1) cette base n'est plus
 orthogonale : les modes se corrèlent, ce qui dégrade le conditionnement du
 fit (déjà surveillé par ``diagnostics["condition_number"]`` dans
 :func:`zernike_fit.fit_zernike`) et brouille l'interprétation physique de
@@ -15,7 +15,7 @@ chaque coefficient.
 
 Ce module ré-orthogonalise numériquement la base sur le masque *réel*
 fourni, par Gram-Schmidt modifié — cf. §3.7bis de
-``phase_retrieval_and_diversity.md`` pour le contexte et les alternatives
+``REFERENCE_TECHNIQUE.md`` pour le contexte et les alternatives
 (polynômes annulaires de Mahajan, modes de Karhunen-Loève).
 
 Références
@@ -201,3 +201,69 @@ class ZernikeGramSchmidt:
             if j in self.orthonormal_modes:
                 wavefront = wavefront + a * self.orthonormal_modes[j]
         return wavefront
+
+
+def resolve_zernike_basis(
+    npix: int,
+    nterms: int,
+    mask: NDArray[np.float64],
+    *,
+    orthogonalize: bool = False,
+) -> NDArray[np.float64]:
+    """
+    Point d'entrée commun pour choisir la base de Zernike utilisée par les
+    trois méthodes de récupération de phase (§6.1) et par ``zernike_fit``.
+
+    Parameters
+    ----------
+    npix : int
+        Taille (pixels) de la grille, carrée.
+    nterms : int
+        Nombre de modes (ordre de Noll maximal).
+    mask : NDArray
+        Masque pupillaire réellement utilisé — seul argument qui change
+        selon ``orthogonalize``.
+    orthogonalize : bool, default False
+        ``False`` (comportement historique, inchangé) : base de Noll
+        standard (:func:`optics.build_zernike_basis`), orthogonale
+        uniquement sur un disque plein non obstrué. ``True`` : base
+        ré-orthogonalisée par Gram-Schmidt sur ``mask`` (§10) —
+        recommandé dès que la pupille n'est pas un disque plein
+        (obstruction centrale, bras d'araignée), cas le plus courant en
+        télédétection (§8.1).
+
+    Returns
+    -------
+    NDArray
+        Base ``(nterms, npix, npix)``, directement utilisable par
+        ``optics.phase_from_coefficients``/``psf_from_phase`` : même
+        forme et même correspondance indice ↔ ordre de Noll dans les deux
+        cas (``basis[k]`` = mode de Noll ``k + 1``).
+
+    Raises
+    ------
+    ValueError
+        Si ``orthogonalize=True`` et qu'au moins un mode d'indice ≤
+        ``nterms`` est linéairement dépendant des précédents sur ce
+        masque (cas dégénéré — masque trop obstrué ou sous-échantillonné
+        pour ``nterms``) : ``ZernikeGramSchmidt`` l'ignore silencieusement
+        (voir sa docstring), ce qui décalerait la correspondance
+        indice ↔ Noll dans le tableau dense renvoyé par
+        ``as_basis_array`` — mieux vaut échouer explicitement que
+        renvoyer des coefficients dont l'indexation a glissé.
+    """
+    if not orthogonalize:
+        return build_zernike_basis(npix=npix, nterms=nterms)
+
+    gram_schmidt = ZernikeGramSchmidt(mask, j_max=nterms)
+    available = sorted(gram_schmidt.orthonormal_modes)
+    if available != list(range(1, nterms + 1)):
+        missing = sorted(set(range(1, nterms + 1)) - set(available))
+        raise ValueError(
+            f"Gram-Schmidt a écarté le(s) mode(s) {missing} comme "
+            f"linéairement dépendant(s) sur ce masque (orthogonality_error="
+            f"{gram_schmidt.orthogonality_error:.2e}) — réduire nterms/"
+            "zernike_order, ou vérifier l'échantillonnage du masque, plutôt "
+            "que de laisser la correspondance indice/Noll glisser."
+        )
+    return gram_schmidt.as_basis_array()

@@ -50,7 +50,7 @@ Zernike — aucun autre portage de code tiers).
 Toute nouvelle méthode doit être accompagnée d'un test dans
 `tests/test_simulation_roundtrip.py` : simulation d'un cas à vérité de
 Zernike connue (`eoqual.phaseretrieval.simulation`, avec et sans bruit
-détecteur) → appel de la méthode → comparaison des coefficients retrouvés
+détecteur) → appel de la méthode → comparaison des coefficients récupérés
 à la vérité terrain. Le module de simulation étant lui-même séparé des
 méthodes (`simulation/` n'importe aucun `backends/*`, sauf
 `diversity_phase` réutilisé pour garantir la même convention de défocus),

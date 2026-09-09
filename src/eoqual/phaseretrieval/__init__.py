@@ -1,5 +1,5 @@
 """
-eoqual.phaseretrieval — PSF -> WFE -> Zernike, par retrouvé de phase et
+eoqual.phaseretrieval — PSF -> WFE -> Zernike, par récupération de phase et
 diversité de phase.
 
 Convertit une (ou deux) PSF mesurée(s) en coefficients de Zernike (ordre

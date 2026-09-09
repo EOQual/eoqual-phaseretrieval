@@ -83,7 +83,7 @@ def apply_detector_noise(
         :func:`eoqual.phaseretrieval.pipeline.psf_to_wfe` juste après
         ``io_utils.load_image`` sur une vraie acquisition — l'image
         renvoyée est donc directement utilisable par n'importe laquelle
-        des trois méthodes de retrouvé de phase, sans étape intermédiaire.
+        des trois méthodes de récupération de phase, sans étape intermédiaire.
 
     Returns
     -------

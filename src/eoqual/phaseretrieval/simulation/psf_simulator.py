@@ -3,8 +3,8 @@
 """
 Génération d'une PSF à vérité de Zernike connue.
 
-Code de **simulation**, volontairement séparé des méthodes de retrouvé de
-phase (``backends/``) : il sert à fabriquer des cas de test (vérité
+Code de **simulation**, volontairement séparé des méthodes de récupération
+de phase (``backends/``) : il sert à fabriquer des cas de test (vérité
 terrain connue) pour valider n'importe laquelle des trois méthodes, pas à
 en implémenter une. S'appuie sur le même modèle direct que les méthodes
 par optimisation (:mod:`eoqual.phaseretrieval.optics`), pour que la PSF
@@ -83,7 +83,7 @@ def simulate_psf_from_zernike(
     """
     Simule une PSF diffraction-limitée avec une aberration de Zernike
     connue — la vérité terrain nécessaire pour tester une méthode de
-    retrouvé de phase (§6.4 de ``REFERENCE_TECHNIQUE.md``).
+    récupération de phase (§6.4 de ``REFERENCE_TECHNIQUE.md``).
 
     Parameters
     ----------
@@ -115,7 +115,7 @@ def simulate_psf_from_zernike(
         - ``"mask"`` : masque pupillaire utilisé.
         - ``"coeffs_nm"`` : coefficients de Zernike réellement appliqués
           (tableau dense, longueur ``zernike_order``) — la vérité terrain
-          à comparer aux coefficients retrouvés.
+          à comparer aux coefficients récupérés.
         - ``"wavelength"`` : longueur d'onde utilisée [m].
     """
     if mask is None:

@@ -1,13 +1,11 @@
 # eoqual-phaseretrieval — Référence technique
 
 > Document de référence théorique **et** technique de ce module. Il couvre
-> la famille complète des méthodes de retrouvé de phase implémentées ici — y
+> la famille complète des méthodes de récupération de phase implémentées ici — y
 > compris la diversité de phase, qui en est une variante à deux images plutôt
 > qu'une méthode indépendante — d'où le nom du module (« phase retrieval »
-> chapeaute « phase diversity », pas l'inverse). Un seul document a été
-> conservé plutôt que deux séparés : les trois méthodes partagent la même
-> base physique (§1‑2) et la même interface de code (§6), et un document
-> unique évite de dupliquer cette partie commune.
+> chapeaute « phase diversity », pas l'inverse). Les trois méthodes partagent la même
+> base physique (§1‑2) et la même interface de code (§6).
 
 ---
 
@@ -49,7 +47,40 @@ de la WFE modulo ces degrés de liberté [1, 5]. C'est précisément ce que la
 *diversité de phase* (§3.4) est conçue pour lever, en ajoutant une seconde
 mesure dans laquelle l'ambiguïté ne se manifeste pas de la même façon.
 
-### Illustration empirique (ce projet)
+### 2.1 Amplitude et centrage : que récupèrent réellement ces méthodes ?
+
+Question fréquente, à préciser avant tout usage sur des données réelles :
+les trois méthodes ne récupèrent **que la phase** $\phi$, jamais
+l'amplitude de la pupille $P$, qui est toujours prise comme une donnée
+d'entrée fixe (le masque binaire fourni à `psf_to_wfe`) — pas comme un
+paramètre ajusté. Une pupille réellement apodisée (transmission non
+uniforme, vignettage) et modélisée ici par un masque purement binaire
+introduit donc un biais de modèle qui n'est jamais détecté ni corrigé par
+l'algorithme lui-même.
+
+Le centrage (décalage $dx, dy$ du pic de la PSF, physiquement équivalent
+au tip-tilt $Z_2, Z_3$ — voir la ligne « Tip-tilt » ci-dessus) est traité
+différemment selon la méthode, et **aucune des trois ne l'estime par
+défaut** :
+
+| Méthode | Tip-tilt / décalage | Détail |
+|---|---|---|
+| `"optimization"` | Estimable en option | `OpticalConfig(fit_piston_tilt=True)` ajoute $Z_2, Z_3$ aux paramètres libres — physiquement équivalent à un décalage sous-pixel dans l'approximation paraxiale. `False` par défaut : $Z_1$–$Z_3$ figés à 0. |
+| `"gerchberg_saxton"` | Non restituable | La phase brute récupérée pixel à pixel peut absorber un décalage réel, mais `zernike_fit.fit_zernike` **remet systématiquement $Z_1$–$Z_3$ à zéro** après projection (`# Remove piston and tilts`) : même si GS l'a implicitement « vu », l'information est perdue à l'étape de décomposition en Zernike. |
+| `"phase_diversity"` | Non implémenté | $Z_1$–$Z_3$ sont figés à 0 en dur (`coeffs[3:] = active_coeffs`), sans option pour les libérer — un vrai décalage entre les deux PSF biaiserait donc l'ensemble du fit conjoint. |
+
+**Implication pratique :** l'implémentation actuelle suppose que la (les)
+PSF fournie(s) en entrée sont déjà recentrées sur la grille (pic au
+centre géométrique du tableau) — c'est typiquement le rôle d'une étape de
+recalage en amont (voir §5.0 : Shift-and-Add, ePSF, PSFr) plutôt que du
+récupération de phase elle-même. Sur une PSF mal centrée, `"optimization"` avec
+`fit_piston_tilt=True` est la seule option qui peut absorber un léger
+décalage résiduel ; les deux autres méthodes en hériteraient un biais sur
+tous les coefficients (le modèle, toujours centré par construction —
+`optics.psf_from_phase` — ne peut pas reproduire un pic décalé autrement
+qu'en dégradant l'ajustement des modes réels).
+
+### Illustration empirique
 
 La validation menée dans [`examples/psf2zernike_demo.ipynb`](examples/psf2zernike_demo.ipynb) sur les
 données du simulateur (`examples/data/*_simu.tiff`, vérité terrain
@@ -63,7 +94,7 @@ $Z_4=55{,}0$ nm, $Z_5=27{,}5$ nm) rend ces ambiguïtés très concrètes :
 
 ---
 
-## 3. Panorama des méthodes de retrouvé de phase
+## 3. Panorama des méthodes de récupération de phase
 
 | Méthode | Principe | Points forts / faibles | Référence(s) |
 |---|---|---|---|
@@ -114,11 +145,11 @@ choix dans un régime particulier.
   estimation initiale rapide (ex. boucle d'optique adaptative en régime
   déjà corrigé, où le résidu est petit par construction) mais sont
   supplantées par les méthodes non linéaires dès que l'aberration est
-  significative — précisément le cas visé par ce projet.
+  significative.
 
 ### 3.7 Lever l'ambiguïté de signe par un a priori
 
-**Peut-on retrouver le bon signe avec un a priori sur $Z_4$ (et éventuellement
+**Peut-on récupérer le bon signe avec un a priori sur $Z_4$ (et éventuellement
 d'autres modes) ?** Oui — et il suffit d'**un seul** a priori, sur **un
 seul** mode, pour résoudre le signe de tous les modes concernés à la fois.
 Ce résultat se démontre exactement, pas seulement empiriquement.
@@ -130,7 +161,7 @@ $\lvert\mathcal{F}\{g^*(-\cdot)\}\rvert = \lvert\mathcal{F}\{g\}\rvert$
 appliquée à $g=P\,e^{i\phi}$ montre que $(P,\phi)$ et
 $(P,\,-\phi(-\xi,-\eta))$ produisent **exactement** la même PSF — c'est
 l'ambiguïté « image jumelle », cataloguée par Millane (1990) [12] parmi les
-ambiguïtés triviales du retrouvé de phase. En décomposant $\phi$ sur la
+ambiguïtés triviales de la reconstruction de phase. En décomposant $\phi$ sur la
 base de Zernike (ordre de Noll $j$, fréquence azimutale $m_j$), l'inversion
 de coordonnées donne $Z_j(\rho,\theta+\pi)=(-1)^{m_j}Z_j(\rho,\theta)$, d'où
 les coefficients de la « jumelle » :
@@ -145,7 +176,7 @@ c_j' = +c_j & \text{si } m_j \text{ impair (tip/tilt, coma } Z_7,Z_8\text{, trè
 $$
 
 **Conséquence pratique :** les modes de fréquence azimutale **impaire**
-(coma, trèfle, coma secondaire, …) sont retrouvés avec le **bon signe dès
+(coma, trèfle, coma secondaire, …) sont récupérés avec le **bon signe dès
 la première PSF**, sans aucune ambiguïté. Seuls les modes de fréquence
 **paire** (défocus, astigmatisme, sphérique, astigmatisme secondaire,
 quadrafoil, …) peuvent être inversés — mais **ensemble**, comme un seul
@@ -198,7 +229,7 @@ des méthodes à part entière mais des options de la diversité de phase.
 
 La décomposition finale en coefficients de Zernike (ordre de Noll) est
 commune aux trois méthodes : linéaire par moindres carrés pour GS (la phase
-est d'abord retrouvée pixel à pixel, puis projetée — voir
+est d'abord récupérée pixel à pixel, puis projetée — voir
 [`zernike_fit.py`](src/eoqual/phaseretrieval/zernike_fit.py)), directe pour les deux autres (les
 coefficients *sont* les paramètres de l'optimisation).
 
@@ -284,7 +315,7 @@ src/eoqual/phaseretrieval/
     config.py                      # registre METHODS_CONFIGS
     runner.py                      # list_methods()
     backends/
-        gerchberg_saxton.py        # Gerchberg-Saxton                 (1 PSF)
+        gerchberg_saxton.py        # Gerchberg-Saxton                  (1 PSF)
         optimization.py            # optimisation directe              (1 PSF)
         phase_diversity.py         # diversité de phase modale         (2 PSF)
     simulation/                    # génération de cas de test (vérité connue) — voir §6.7
@@ -333,7 +364,7 @@ modules.
 |---|---|---|---|
 | Config | `RetrievalConfig` | `OpticalConfig` | `PhaseDiversityConfig` |
 | Variables ajustées | phase $\phi$ (par pixel) | coefficients $c_4 \dots c_N$ | coefficients $c_4 \dots c_N$ |
-| Fonction de coût | contraintes d'amplitude alternées (pas de coût explicite) | `retrieval_optimization.residuals` | `retrieval_phase_diversity.residuals` (deux canaux concaténés) |
+| Fonction de coût | contraintes d'amplitude alternées (pas de coût explicite) | `backends.optimization.residuals` | `backends.phase_diversity.residuals` (deux canaux concaténés) |
 | Solveur | boucle FFT/IFFT (`max_iter` itérations) | `scipy.optimize.least_squares(method="trf")` | idem, + `loss=` robuste et pondération Poisson optionnelle |
 | Étape Zernike | `zernike_fit.fit_zernike` (a posteriori, moindres carrés linéaires) | intégrée à l'optimisation | intégrée à l'optimisation |
 | Diagnostics | rang, conditionnement, RMS résiduel (nm) | coût, `nfev`, RMSE PSF | coût, `nfev`, RMSE PSF (focus + défocus) |
@@ -367,15 +398,14 @@ coût — pas de fenêtre dure qui coupe le signal, mais une pondération douce
 (taper gaussien) qui priorise le cœur à haut SNR sur les ailes bruitées
 (`core_weight_radius`), et une régularisation de Tikhonov qui stabilise le
 fit quand il est sous-contraint (`l2_reg`, ordre élevé + PSF peu
-lumineuse/bruitée). Portage adapté du prototype `Star/star_PSF/psf_star_V2d.py`
-(fonction de coût pondérée + régularisée du fit Zernike direct).
+lumineuse/bruitée).
 
 ### 6.4 Validation
 
 La validation numérique utilise le module de simulation (§6.7,
 `eoqual.phaseretrieval.simulation`), qui génère une vérité de Zernike
 connue à la demande — `tests/test_simulation_roundtrip.py` est la suite
-de référence (simulation → retrouvé de phase → comparaison à la vérité
+de référence (simulation → récupération de phase → comparaison à la vérité
 terrain), rejouée à chaque exécution des tests plutôt que figée dans des
 fixtures. Les résultats de fond sont résumés en §2 ; ils confirment sur
 des données contrôlées les ambiguïtés théoriques du §2 et §3, et donnent
@@ -412,9 +442,9 @@ groupées par méthode.
 ### 6.7 Module de simulation (données à vérité connue)
 
 `eoqual.phaseretrieval.simulation` est volontairement **séparé** des
-backends de retrouvé de phase : il ne fait que fabriquer des cas de
+backends de reconstruction de phase : il ne fait que fabriquer des cas de
 test, avec un défocus/une aberration connus par construction, pas les
-retrouver. Deux générateurs :
+récupérer. Deux générateurs :
 
 - `simulate_psf_from_zernike(coeffs_nm, ...)` — une PSF unique, pour les
   méthodes `"gerchberg_saxton"`/`"optimization"`. Réutilise directement
@@ -486,7 +516,7 @@ de sa pertinence en télédétection.
 
 ---
 
-## 8. Cas d'usage : télédétection (observation de la Terre)
+## 8. Cas d'usage : observation de la Terre
 
 Ce qui suit répond à une question fréquente sur ce projet : quelles
 méthodes privilégier pour un instrument d'observation de la Terre (défilant
@@ -505,7 +535,7 @@ ou agile), et la piste « maximum de vraisemblance / pondération Poisson »
   actionneur thermique sur le miroir secondaire) **dans le mauvais sens** —
   contrairement à un contexte purement diagnostique, l'erreur est
   immédiatement coûteuse et vérifiable. C'est précisément le cas d'usage
-  visé par Pléiades‑HR chez CNES : le défocus est estimé à partir
+  visé par le satellite Pléiades (CNES) : le défocus est estimé à partir
   d'acquisitions d'étoiles puis corrigé par actionnement thermique du
   miroir M2 [13].
 - **Pupille réelle.** Un télescope de télédétection est généralement
@@ -520,7 +550,7 @@ ou agile), et la piste « maximum de vraisemblance / pondération Poisson »
   l'objet et de l'aberration), formalisée par Paxman, Schulz & Fienup [9]
   et explicitement testée sur des images de paysage par Ikoma, Delvit,
   Latry, Thiébaut & Morel (CNES, 2015) [15]. **Ce n'est pas ce
-  qu'implémente `backends/phase_diversity.py`** : notre module suppose
+  qu'implémente actuellement `backends/phase_diversity.py`** : notre module suppose
   l'objet ponctuel (source du type étoile), valide pour les campagnes
   dédiées mais pas pour un suivi de focus à partir de l'imagerie
   opérationnelle courante — voir §6.5 si cette extension est souhaitée.
@@ -529,7 +559,7 @@ ou agile), et la piste « maximum de vraisemblance / pondération Poisson »
 
 1. **Campagne dédiée avec manœuvre de défocalisation (étoiles)** →
    `"phase_diversity"`, sans hésitation : c'est la méthode déjà validée et
-   utilisée opérationnellement dans ce contexte précis (Pléiades‑HR [13],
+   utilisée opérationnellement dans ce contexte précis (Pléiades [13],
    étude de sensibilité pour les futurs télescopes d'observation de la
    Terre [13, 14]), et c'est la seule des trois qui lève l'ambiguïté de
    signe de façon fiable — critique ici (§8.1).
@@ -571,7 +601,7 @@ vol) :
   statistiquement sous‑optimal — un signal supplémentaire que le
   traitement rigoureux du bruit est pris au sérieux dans ce contexte.
 
-**Ce que je n'ai pas trouvé** (recherches bibliographiques ciblées, non
+**Aucune publiation trouvée** (recherches bibliographiques ciblées, non
 exhaustives) : une publication qui teste et quantifie explicitement une
 pondération **Poisson** (par opposition à gaussienne/non pondérée) sur des
 données réelles de télédétection avec chiffres à l'appui — plutôt des
@@ -600,7 +630,7 @@ télédétection, plus que dans le raffinement du modèle de bruit seul.
 
 Complément indépendant du fit Zernike : le module [`diagnostics.py`](src/eoqual/phaseretrieval/diagnostics.py)
 fournit des métriques de qualité optique calculables **avant** ou **sans**
-retrouvé de phase — utiles pour un premier diagnostic rapide, ou pour
+reconstruction de phase — utiles pour un premier diagnostic rapide, ou pour
 comparer plusieurs méthodes entre elles sur un pied d'égalité.
 
 ### 9.1 Rapport de Strehl
@@ -707,10 +737,33 @@ masque *réel* fourni (Gram-Schmidt modifié [19, 20], réutilise
 numériquement : orthogonalité quasi machine-epsilon (`< 1e-14`) aussi bien
 sur notre masque plein que sur une pupille annulaire synthétique
 (obstruction centrale). C'est un utilitaire **autonome** (`decompose`/
-`reconstruct`/`as_basis_array`) — non branché par défaut dans
-`zernike_fit.fit_zernike`, qui continue d'utiliser la base Noll standard
-sauf action explicite ; à utiliser quand un masque non standard (obstrué,
-avec araignées) est en jeu.
+`reconstruct`/`as_basis_array`), et un point d'entrée commun
+(`resolve_zernike_basis`) le branche en **option** (`orthogonal_basis:
+bool = False`, sur `ZernikeConfig`, `OpticalConfig`, `PhaseDiversityConfig`
+et `psf_to_wfe(..., orthogonal_basis=True)` / `--orthogonal_basis` en CLI)
+dans les trois méthodes de récupération de phase — désactivée par défaut
+(comportement historique inchangé), à activer dès qu'un masque non
+standard (obstrué, avec araignées) est en jeu. Un garde-fou explicite
+(`ValueError`) empêche silencieusement le décalage d'index qui se
+produirait si Gram-Schmidt écartait un mode dégénéré (masque trop
+obstrué/sous-échantillonné pour `zernike_order`) : voir la docstring de
+`resolve_zernike_basis`.
+
+**Mise en garde pour la comparaison à une vérité terrain.** Les
+coefficients obtenus avec `orthogonal_basis=True` ne sont *pas*
+directement comparables, indice par indice, à des coefficients de
+référence exprimés sur la base de Noll standard (ex. la vérité simulée
+par `eoqual.phaseretrieval.simulation`, qui utilise toujours la base
+standard) : même sous-espace de fonctions, mais une base différente au-delà
+des tout premiers modes (§ ci-dessus). Vérifié empiriquement sur une
+pupille annulaire à 30 % d'obstruction : la même PSF simulée, ajustée
+avec `orthogonal_basis=True`, donne une corrélation ≈ 0,99 (au lieu de
+1,00 en base standard) avec la vérité *exprimée en base standard* — pas
+une régression de la méthode, un effet de changement de base (et de
+convergence du solveur, le coût final y étant aussi moins bon). Pour un
+test de bout en bout rigoureux avec cette option, décomposer la vérité
+terrain dans la *même* base orthogonalisée (`ZernikeGramSchmidt.decompose`)
+avant de comparer, plutôt que dans la base standard.
 
 ---
 
@@ -753,6 +806,42 @@ où, pour l'image $k$ (diversité $Z_4=\alpha_k$) :
   — intégration sur le spectre du filtre $S(\lambda)$ (5–9 longueurs
   d'onde suffisent en pratique ; même $\phi_{\text{HO}}$, phase $\propto 1/\lambda$).
 
+**Ce qui change concrètement pour passer du monochromatique actuel à ce
+terme $\text{OTF}_{\text{poly}}$.** Le modèle actuel (`optics.psf_from_phase`)
+suppose une seule longueur d'onde $\lambda_0$ pour tout le calcul : les
+coefficients de Zernike sont convertis une fois en radians via
+`rad_to_nm = wavelength * 1e9 / (2π)`, puis une seule FFT donne la PSF.
+L'intégration polychromatique demanderait, à chaque évaluation du modèle
+direct (donc à *chaque itération du solveur* pour `"optimization"`/
+`"phase_diversity"`) :
+
+1. Reconvertir la **même** carte de phase (en mètres d'OPD, indépendante
+   de $\lambda$) en radians pour *chaque* $\lambda_i$ du sous-échantillonnage
+   spectral (`phase_rad_i = opd_m * 2π / λ_i`, phase $\propto 1/\lambda$) ;
+2. Calculer la PSF pour chaque $\lambda_i$ — mais **pas** par un simple
+   `psf_from_phase` sur la même grille : la taille de la tache de
+   diffraction (en pixels) dépend de $\lambda$, donc chaque PSF
+   monochromatique doit être calculée sur une grille rééchantillonnée
+   avant de revenir sur la grille commune, exactement la technique déjà
+   implémentée dans
+   [`simulation/star_profiles.py`](src/eoqual/phaseretrieval/simulation/star_profiles.py)
+   (`psf_from_pupil_field_wavelength_scaled`, utilisée pour le simulateur
+   Bayer multi-bande) — à réutiliser telle quelle plutôt qu'à réécrire ;
+3. Sommer les PSF pondérées par $S(\lambda_i)$ et normaliser.
+
+**Coût** : $N_\lambda$ FFT (+ un ré-échantillonnage) au lieu d'une seule
+par évaluation du modèle — pour `"optimization"`/`"phase_diversity"`, qui
+évaluent le modèle à chaque itération du solveur (`least_squares`, souvent
+des dizaines à quelques centaines d'évaluations), un facteur $N_\lambda$
+(5–9 dans la pratique citée en §8.3) sur le temps de calcul total.
+Gerchberg-Saxton n'a pas d'équivalent naturel : son itération alterne des
+contraintes d'amplitude *exactes* dans les deux plans, ce qui ne se
+généralise pas directement à une somme incohérente sur plusieurs
+longueurs d'onde ; l'extension polychromatique concerne donc surtout les
+deux méthodes basées optimisation. Un $S(\lambda)$ mal connu ou approximé
+introduit en outre une erreur de modèle difficile à distinguer, en
+pratique, du WFE haut ordre ou du détecteur (voir §11.2 juste après).
+
 ### 11.2 Le problème d'identifiabilité
 
 Point le plus important, à retenir avant d'implémenter quoi que ce soit de
@@ -769,12 +858,44 @@ de ne pas biaiser $Z_4, Z_5, Z_6$.
 ### 11.3 Statut
 
 Rien de cette section n'est implémenté dans ce projet à ce stade — c'est
-une piste d'extension, pas une capacité actuelle. Si un `OTF_HO`/`OTF_det`
-mesuré devient disponible, l'intégrer est direct : le multiplier,
-point à point en fréquence, à l'OTF optique déjà calculée par
-`optics.psf_from_phase` (en passant par sa transformée de Fourier) avant
-de revenir en PSF par FFT inverse — sans toucher au reste du modèle
-d'optimisation (§6.3).
+une piste d'extension, pas une capacité actuelle. Deux cas bien différents
+selon ce dont on dispose réellement sur le WFE haut ordre (HO) :
+
+- **Carte de phase HO connue** (mesurée indépendamment — interférogramme,
+  as-built optique, calibration sol) : l'intégration est **directe et
+  déterministe**, sans passer par l'OTF. La carte HO connue s'ajoute
+  simplement, point à point en radians, à la phase bas ordre *avant* le
+  calcul de la PSF — exactement le même principe que
+  `backends.phase_diversity.diversity_phase`, qui ajoute déjà un terme de
+  phase connu (le défocus de diversité) sans le faire dépendre du
+  solveur :
+
+  ```python
+  phase_low_order = phase_from_coefficients(coeffs_rad, basis, mask)  # paramètres libres
+  phase_total = phase_low_order + phase_ho_known_rad                  # terme fixe, non ajusté
+  model_psf = psf_from_phase(phase_total, mask)
+  ```
+
+  Pour `"optimization"`/`"phase_diversity"`, c'est un ajout ponctuel dans
+  `residuals()`/`fit_...()` (un paramètre `known_phase_rad: NDArray` de
+  plus, jamais optimisé) — la structure de l'optimisation ne change pas,
+  seuls les bas ordres restent des paramètres libres, ce qui est
+  précisément ce qui limite le biais évoqué en §11.2 (« ne pas biaiser
+  $Z_4, Z_5, Z_6$ »). Moins naturel pour `"gerchberg_saxton"`, qui ne
+  paramètre pas sa phase par une base modale — il faudrait plutôt
+  soustraire l'effet de la carte HO connue de l'amplitude mesurée avant
+  la boucle GS, une transformation plus invasive et non implémentée ici.
+- **Seule la statistique (PSD) du HO est connue**, pas sa carte exacte
+  (cas le plus courant en pratique — turbulence résiduelle, tolérances de
+  fabrication non mesurées individuellement) : c'est le cas visé par la
+  formule $\text{OTF}_{\text{HO}}\approx\exp[-\tfrac12 D_\phi(\lambda f)]$
+  de §11.1. Ici, pas de carte à ajouter en phase : on multiplie,
+  point à point en fréquence, l'OTF optique déjà calculée par
+  `optics.psf_from_phase` (en passant par sa transformée de Fourier) par
+  ce terme statistique, avant de revenir en PSF par FFT inverse — sans
+  toucher au reste du modèle d'optimisation (§6.3). Cette approche est
+  plus approximative (un effet *moyen*, pas la vraie carte) mais
+  s'applique quand la seconde option ci-dessus n'est pas disponible.
 
 ---
 
@@ -810,7 +931,7 @@ d'optimisation (§6.3).
     Mathematical Statistics*, 35(1), 73–101 (1964).
 12. R. P. Millane, "Phase retrieval in crystallography and optics,"
     *Journal of the Optical Society of America A*, 7(3), 394–411 (1990).
-    (catalogue les ambiguïtés triviales du retrouvé de phase, dont
+    (catalogue les ambiguïtés triviales de la récupération de phase, dont
     l'ambiguïté « image jumelle » de conjugaison/inversion utilisée en §3.7)
 13. Ch. Latry, J.-M. Delvit, and C. Thiébaut, "Sensitivity analysis of
     phase diversity technique for high resolution earth observing
@@ -850,8 +971,7 @@ d'optimisation (§6.3).
 > identifiées par recherche bibliographique ciblée (titres, auteurs,
 > revues/actes et années confirmés) plutôt que par lecture intégrale des
 > articles. Les références [18]–[20] proviennent de la docstring d'un
-> prototype externe au dépôt (`Star/star_PSF/psf_star_V2d.py`, répertoire
-> fourre-tout) et n'ont pas été re-vérifiées indépendamment cette fois-ci.
+> prototype externe au dépôt (`Star/star_PSF/psf_star_V2d.py`) et n'ont pas été re-vérifiées indépendamment cette fois-ci.
 > Dans tous les cas, les détails quantitatifs qu'elles contiennent restent
 > à vérifier directement dans les textes avant citation dans un document
 > externe à ce projet.

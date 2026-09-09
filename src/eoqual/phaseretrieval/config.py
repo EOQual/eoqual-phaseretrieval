@@ -1,5 +1,5 @@
 """
-Registre central des méthodes de retrouvé de phase disponibles dans
+Registre central des méthodes de récupération de phase disponibles dans
 ``eoqual.phaseretrieval``.
 
 Chaque entrée décrit : le nombre de PSF requises, la licence de

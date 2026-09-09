@@ -2,11 +2,11 @@
 eoqual.phaseretrieval.simulation — génération de cas de test à vérité de
 Zernike connue.
 
-Volontairement **séparé** des méthodes de retrouvé de phase
+Volontairement **séparé** des méthodes de récupération de phase
 (``eoqual.phaseretrieval.backends``) : ce sous-paquet ne fait que fabriquer
 des données d'entrée (PSF simple, ou paire focus/défocus bruitée), il n'en
-retrouve aucune. Sert à valider n'importe laquelle des trois méthodes de
-bout en bout, en comparant les coefficients retrouvés à la vérité terrain
+récupère aucune. Sert à valider n'importe laquelle des trois méthodes de
+bout en bout, en comparant les coefficients récupérés à la vérité terrain
 renvoyée dans ``coeffs_nm``.
 
 Examples

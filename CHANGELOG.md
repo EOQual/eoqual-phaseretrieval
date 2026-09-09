@@ -31,7 +31,15 @@
         cas d'usage télédétection), `THIRD_PARTY_LICENSES.md`,
         `CONTRIBUTING.md`.
     -   Architecture en paquet `src/eoqual/phaseretrieval` : une méthode
-        de retrouvé de phase = un module de `backends/`.
+        de récupération de phase = un module de `backends/`.
+    -   Option `orthogonal_basis` (`ZernikeConfig`, `OpticalConfig`,
+        `PhaseDiversityConfig`, `psf_to_wfe(...)`/`--orthogonal_basis` en
+        CLI) : bascule les trois méthodes sur une base de Zernike
+        ré-orthogonalisée par Gram-Schmidt sur le masque réel
+        (`zernike_basis_orthogonal.ZernikeGramSchmidt`, déjà présent mais
+        jusqu'ici non branché) plutôt que la base de Noll standard —
+        recommandé pour une pupille obstruée. `False` par défaut,
+        comportement historique inchangé.
 
 ## Évolutions futures
 

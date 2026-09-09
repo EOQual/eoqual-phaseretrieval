@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Retrouvé de phase par diversité de phase modale.
+Récupération de phase par diversité de phase modale.
 
-Contrairement aux deux autres méthodes (:mod:`retrieval_gs`,
-:mod:`retrieval_optimization`), celle-ci nécessite **deux** PSF en entrée :
+Contrairement aux deux autres méthodes (:mod:`backends.gerchberg_saxton`,
+:mod:`backends.optimization`), celle-ci nécessite **deux** PSF en entrée :
 une PSF focalisée et une seconde PSF acquise avec un défocus (ou toute
 autre aberration) connu et volontairement introduit. Les coefficients de
 Zernike sont ajustés conjointement sur les deux images, ce qui lève
@@ -27,7 +27,8 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.optimize import least_squares
 
-from ..optics import build_zernike_basis, phase_from_coefficients, psf_from_phase
+from ..optics import phase_from_coefficients, psf_from_phase
+from ..zernike_basis_orthogonal import resolve_zernike_basis
 
 
 @dataclass(slots=True)
@@ -54,7 +55,7 @@ class PhaseDiversityConfig:
         of residuals and needlessly slow down the solver. Too small a
         value instead crops part of the signal that constrains the
         higher-order Zernike modes (which spread the PSF further out) —
-        see ``phase_retrieval_and_diversity.md`` §6.3 for the trade-off and
+        see ``REFERENCE_TECHNIQUE.md`` §6.3 for the trade-off and
         a worked example.
     loss : str
         Robust loss function name passed to ``scipy.optimize.least_squares``
@@ -67,6 +68,12 @@ class PhaseDiversityConfig:
         scipy's default.
     verbose : bool
         Print the solver's convergence trace.
+    orthogonal_basis : bool, default False
+        Fit on a Gram-Schmidt basis orthogonalised on the actual mask
+        (see :class:`zernike_fit.ZernikeConfig` and §10 of
+        ``REFERENCE_TECHNIQUE.md``) instead of the standard Noll basis —
+        recommended for an obstructed pupil (central obstruction,
+        spiders). ``False`` (default) keeps the historical behaviour.
     """
     wavelength: float = 550e-9
     zernike_order: int = 36
@@ -76,6 +83,7 @@ class PhaseDiversityConfig:
     poisson_weighting: bool = True
     max_nfev: Optional[int] = None
     verbose: bool = True
+    orthogonal_basis: bool = False
 
 
 def build_roi_mask(shape: Tuple[int, int], radius: int) -> NDArray[np.bool_]:
@@ -248,7 +256,10 @@ def fit_phase_diversity(
         evaluations, solver status message and PSF-domain RMSE (both
         channels).
     """
-    basis = build_zernike_basis(npix=psf_focus.shape[0], nterms=cfg.zernike_order)
+    basis = resolve_zernike_basis(
+        npix=psf_focus.shape[0], nterms=cfg.zernike_order, mask=mask,
+        orthogonalize=cfg.orthogonal_basis,
+    )
     roi_mask = build_roi_mask(psf_focus.shape, cfg.roi_radius)
 
     x0 = np.zeros(cfg.zernike_order - 3)

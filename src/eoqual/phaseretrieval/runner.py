@@ -25,7 +25,7 @@ __all__ = ["list_methods"]
 
 
 def list_methods() -> None:
-    """Affiche toutes les méthodes de retrouvé de phase disponibles."""
+    """Affiche toutes les méthodes de récupération de phase disponibles."""
     console = Console()
     table = Table(
         title="Méthodes disponibles dans eoqual.phaseretrieval",

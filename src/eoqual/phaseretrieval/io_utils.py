@@ -4,7 +4,7 @@
 E/S et visualisation communes à toutes les méthodes de reconstruction.
 
 Ce module regroupe les fonctions indépendantes de l'algorithme de
-retrouvé de phase choisi (Gerchberg-Saxton, optimisation directe ou
+récupération de phase choisie (Gerchberg-Saxton, optimisation directe ou
 diversité de phase) : chargement d'images, préparation du masque
 pupillaire et diagnostics graphiques Plotly.
 """
@@ -255,8 +255,8 @@ def visualisation_diagnostics(
         Facteur de conversion radian → nanomètre (utilisé pour le calcul du
         PSF prédit).
     phase_nm : np.ndarray, optional
-        Phase "mesurée" indépendamment (issue par exemple du retrouvé de
-        phase Gerchberg-Saxton), en nm. Absente pour les méthodes qui
+        Phase "mesurée" indépendamment (issue par exemple de la récupération
+        de phase Gerchberg-Saxton), en nm. Absente pour les méthodes qui
         estiment directement les coefficients de Zernike (optimisation,
         diversité de phase) : dans ce cas seule la carte reconstruite est
         affichée.

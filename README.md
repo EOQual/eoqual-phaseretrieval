@@ -4,7 +4,7 @@
 
 # eoqual-phaseretrieval
 
-PSF → WFE → coefficients de Zernike : retrouvé de phase et diversité de
+PSF → WFE → coefficients de Zernike : récupération de phase et diversité de
 phase, pour l'observation de la Terre — voir
 **[REFERENCE_TECHNIQUE.md](REFERENCE_TECHNIQUE.md)** pour le détail
 théorique et d'implémentation de chaque méthode, et
@@ -83,7 +83,7 @@ linéarisées OTF).
 ## Simulation
 
 `eoqual.phaseretrieval.simulation` est un sous-paquet **indépendant** des
-méthodes de retrouvé de phase : il génère des cas de test à vérité de
+méthodes de récupération de phase : il génère des cas de test à vérité de
 Zernike connue (PSF simple, ou paire focus/défocus bruitée), pour valider
 n'importe laquelle des trois méthodes de bout en bout — sans dépendre
 d'une acquisition réelle.
@@ -110,7 +110,7 @@ pair["psf_focus"], pair["psf_defocus"], pair["coeffs_nm"]
 ```
 
 Voir `tests/test_simulation_roundtrip.py` pour des exemples complets
-(simulation → retrouvé de phase → comparaison à la vérité terrain) et
+(simulation → récupération de phase → comparaison à la vérité terrain) et
 [REFERENCE_TECHNIQUE.md](REFERENCE_TECHNIQUE.md) §6.4/§9 pour la
 discussion du modèle de bruit.
 

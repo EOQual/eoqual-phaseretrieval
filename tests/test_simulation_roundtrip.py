@@ -1,6 +1,6 @@
 """
 Validation de bout en bout : simulation (vérité de Zernike connue) ->
-retrouvé de phase -> comparaison à la vérité terrain.
+récupération de phase -> comparaison à la vérité terrain.
 
 Ces tests ne dépendent d'aucune donnée externe (fixtures ``.tiff``) :
 le module ``eoqual.phaseretrieval.simulation`` génère tout ce qu'il faut,
