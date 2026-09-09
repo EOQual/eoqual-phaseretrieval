@@ -72,13 +72,89 @@ défaut** :
 **Implication pratique :** l'implémentation actuelle suppose que la (les)
 PSF fournie(s) en entrée sont déjà recentrées sur la grille (pic au
 centre géométrique du tableau) — c'est typiquement le rôle d'une étape de
-recalage en amont (voir §5.0 : Shift-and-Add, ePSF, PSFr) plutôt que du
+recalage en amont (voir §5.0 : Shift-and-Add, ePSF, PSFr) plutôt que de la
 récupération de phase elle-même. Sur une PSF mal centrée, `"optimization"` avec
 `fit_piston_tilt=True` est la seule option qui peut absorber un léger
 décalage résiduel ; les deux autres méthodes en hériteraient un biais sur
 tous les coefficients (le modèle, toujours centré par construction —
 `optics.psf_from_phase` — ne peut pas reproduire un pic décalé autrement
 qu'en dégradant l'ajustement des modes réels).
+
+### 2.2 Modifications envisageables pour les récupérer
+
+Deux problèmes de nature très différente — l'un tractable avec les outils
+déjà en place, l'autre une refonte plus profonde.
+
+**Centrage (tip-tilt $Z_2, Z_3$) — tractable.**
+
+- `"phase_diversity"` est le vrai manque : contrairement à `"optimization"`,
+  aucune option n'existe pour libérer $Z_2, Z_3$. Ajout naturel : un
+  `fit_tip_tilt: bool = False` sur `PhaseDiversityConfig`, qui étendrait
+  `active_coeffs` à `coeffs[1:]` (Z2 et au-delà) au lieu de `coeffs[3:]`
+  dans `residuals`/`fit_phase_diversity` — même mécanique que
+  `OpticalConfig.fit_piston_tilt`, sans toucher au reste du modèle
+  (`diversity_phase` reste inchangée, elle ne dépend que de `basis[3]`).
+- Nuance sur `"optimization"` : `fit_piston_tilt=True` libère *aussi* le
+  piston ($Z_1$), un paramètre strictement inerte (une constante de phase
+  n'affecte jamais $|\cdot|^2$ dans `psf_from_phase`) — `least_squares` le
+  laisse à 0 pendant tout l'ajustement, sans erreur, mais c'est un
+  paramètre gaspillé. Un nom plus précis, `fit_tip_tilt`, qui ne libère
+  que $Z_2, Z_3$, serait plus correct (à garder rétro-compatible via un
+  alias, ou à documenter tel quel — piston inerte, sans conséquence).
+- `"gerchberg_saxton"` : ajouter un `zero_tip_tilt: bool = True` sur
+  `ZernikeConfig`/`fit_zernike` permettrait de ne plus jeter le tip-tilt
+  que GS a implicitement absorbé dans sa phase pixel à pixel (contrairement
+  au piston $Z_1$, dont la valeur GS est arbitraire — un vrai artefact de
+  l'initialisation aléatoire, pas une mesure — et qui doit rester filtré).
+- **Alternative recommandée en amont plutôt qu'en aval** : un recalage
+  sous-pixel par corrélation de phase (déjà cité §5.0, Shift-and-Add)
+  avant même d'appeler `psf_to_wfe`, est la solution la plus robuste — un
+  tip-tilt Zernike n'est une bonne approximation d'un décalage réel que
+  dans le régime paraxial (petits décalages), alors qu'une corrélation de
+  phase reste valide à n'importe quelle amplitude de décalage. Les options
+  ci-dessus sont utiles en secours (décalage résiduel sous-pixel après un
+  recalage imparfait), pas comme substitut à un recalage correct en amont.
+
+**Amplitude de la pupille — refonte plus profonde, et d'identifiabilité
+incertaine avec la donnée actuelle.**
+
+- Un premier obstacle est réglable sans toucher aux algorithmes : `mask`
+  n'a *besoin* d'être binaire nulle part dans `optics.psf_from_phase`
+  (`pupil = mask * exp(i·phase)` accepte déjà n'importe quelle amplitude
+  réelle dans `[0, 1]`) — c'est
+  `io_utils.load_and_prepare_mask` qui **force** la binarisation
+  (`(mask_raw > 0.5).astype(uint8)`). Une pupille apodisée *mesurée
+  indépendamment* (calibration labo, modèle as-built) pourrait donc déjà
+  être utilisée telle quelle, comme amplitude fixe, en assouplissant
+  uniquement ce chargeur — sans aucune modification des trois méthodes de
+  récupération de phase, puisqu'aucune ne suppose l'amplitude binaire nulle
+  part ailleurs dans le calcul.
+- **Ajuster** l'amplitude conjointement à la phase (plutôt que la mesurer
+  à part) est une tout autre ampleur de changement :
+  - Il faudrait un modèle paramétrique de transmission (ex. une expansion
+    radiale à quelques coefficients, $P=\text{mask}\cdot(1+\sum_k a_k R_k(\rho))$)
+    plutôt qu'une amplitude libre pixel par pixel (bien trop de paramètres
+    pour rester bien posé, à l'inverse de la philosophie « quelques
+    dizaines de coefficients » de ce projet, §1).
+  - Pour `"optimization"`/`"phase_diversity"` : ajouter les $a_k$ au
+    vecteur de paramètres libres de `least_squares`, et modifier
+    `psf_from_phase` (ou une variante) pour prendre un `pupil` complet
+    plutôt qu'un masque fixe — mécaniquement direct, mais avec un vrai
+    risque d'identifiabilité (voir §11.2 : plusieurs effets peuvent
+    produire une signature MTF similaire) qu'il faudrait vérifier
+    empiriquement avant de faire confiance au résultat, surtout avec une
+    seule PSF (`"optimization"`) — `"phase_diversity"`, avec ses deux
+    images à aberration connue et différente, est structurellement mieux
+    posée pour espérer séparer amplitude et phase.
+  - `"gerchberg_saxton"` n'est pas un bon candidat : l'algorithme repose
+    sur l'imposition d'une amplitude **exacte et connue** dans le plan
+    pupille à chaque itération — rendre cette amplitude elle-même
+    inconnue change la nature du problème (retrouvé conjoint
+    amplitude+phase), qui sort du cadre de l'algorithme GS classique
+    implémenté ici.
+  - Non implémenté à ce stade : à traiter comme une piste de recherche
+    plutôt qu'une simple option à ajouter, contrairement au centrage
+    ci-dessus.
 
 ### Illustration empirique
 
