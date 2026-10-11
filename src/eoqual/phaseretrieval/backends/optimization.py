@@ -20,6 +20,7 @@ from scipy.optimize import least_squares
 
 from ..optics import phase_from_coefficients, psf_from_phase, wfe_map_to_phase
 from ..zernike_basis_orthogonal import resolve_zernike_basis
+from ..zernike_priors import build_prior_bounds, build_prior_penalty, feasible_start
 
 
 @dataclass(slots=True)
@@ -50,7 +51,36 @@ class OpticalConfig:
         (in radians); penalises large excursions and improves robustness
         when the fit is under-constrained (e.g. high ``zernike_order`` with
         a noisy or low-flux PSF). ``0.0`` (default) disables it, reproducing
-        the original unregularised fit.
+        the original unregularised fit. Equivalent to a *zero-mean, equal-weight*
+        Gaussian prior on every mode — see ``zernike_priors`` below for the
+        general (per-mode, informative) case, of which this is a special
+        case.
+    zernike_priors : dict, optional
+        Per-mode informative prior, as ``{noll_index: (mean_nm, sigma_nm)}``
+        — e.g. ``{11: (0.0, 5.0)}`` for a known-small spherical aberration.
+        Added to the residual vector as a per-mode L2 penalty
+        (:func:`eoqual.phaseretrieval.zernike_priors.build_prior_penalty`):
+        mathematically a Bayesian MAP estimate with a Gaussian prior
+        ``c_k ~ N(mean_nm, sigma_nm**2)`` on each listed mode — a strict
+        generalisation of ``l2_reg`` (arbitrary mean and per-mode weight,
+        instead of zero and a single shared weight). Typical source: an
+        as-built optical model, a prior calibration, or an error budget —
+        **not** a generic assumption that high-order modes are small (see
+        ``REFERENCE_TECHNIQUE.md`` §6.5bis for why a Kolmogorov-turbulence-style
+        decreasing-with-radial-order prior is *not*, in general, justified
+        for a satellite instrument's own (non-atmospheric) WFE). ``None``
+        (default) disables it. Raises ``ValueError`` if a key is not among
+        the modes actually being fitted (``zernike_order``/``fit_piston_tilt``).
+    zernike_bounds : dict, optional
+        Per-mode hard box constraint, as
+        ``{noll_index: (low_nm, high_nm)}`` — the same idea as
+        ``zernike_priors`` but with a *uniform* prior (zero outside the
+        interval) instead of a Gaussian one, passed directly to
+        ``scipy.optimize.least_squares(bounds=...)``
+        (:func:`eoqual.phaseretrieval.zernike_priors.build_prior_bounds`).
+        Can be combined with ``zernike_priors`` (e.g. a Gaussian prior
+        truncated to a physically plausible range). ``None`` (default)
+        leaves every mode unbounded.
     orthogonal_basis : bool, default False
         Fit on a Gram-Schmidt basis orthogonalised on the actual mask
         (see :class:`zernike_fit.ZernikeConfig` and §10 of
@@ -76,6 +106,8 @@ class OpticalConfig:
     verbose: bool = True
     core_weight_radius: Optional[float] = None
     l2_reg: float = 0.0
+    zernike_priors: Optional[Dict[int, Tuple[float, float]]] = None
+    zernike_bounds: Optional[Dict[int, Tuple[float, float]]] = None
     orthogonal_basis: bool = False
     known_ho_wfe_nm: Optional[NDArray[np.float64]] = None
 
@@ -206,6 +238,20 @@ def fit_zernike_from_psf(
 
     weight = _core_weight(psf.shape, cfg.core_weight_radius) if cfg.core_weight_radius else None
 
+    # A priori individuels par mode (généralisation de l2_reg ci-dessus) :
+    # voir zernike_priors.py pour la dérivation (MAP gaussien = pénalité L2,
+    # MAP uniforme = borne dure) et REFERENCE_TECHNIQUE.md §6.5bis.
+    # active contient des positions de tableau 0-based (coeffs[active] = x) ;
+    # zernike_priors/zernike_bounds sont indexés en Noll (1-based) -> +1.
+    prior_mean_rad, prior_weight = build_prior_penalty(
+        cfg.zernike_priors or {}, active + 1, cfg.wavelength,
+    )
+    has_priors = np.any(prior_weight > 0.0)
+    lower_rad, upper_rad = build_prior_bounds(
+        cfg.zernike_bounds or {}, active + 1, cfg.wavelength,
+    )
+    x0 = feasible_start(lower_rad, upper_rad)
+
     def objective(x: NDArray[np.float64]) -> NDArray[np.float64]:
         coeffs = np.zeros(cfg.zernike_order)
         coeffs[active] = x
@@ -214,12 +260,15 @@ def fit_zernike_from_psf(
             # Tikhonov (L2) regularisation embedded as extra pseudo-residuals:
             # sum(r**2) + l2_reg*sum(x**2) == sum(r**2) + sum((sqrt(l2_reg)*x)**2)
             r = np.concatenate([r, np.sqrt(cfg.l2_reg) * x])
+        if has_priors:
+            r = np.concatenate([r, prior_weight * (x - prior_mean_rad)])
         return r
 
     result = least_squares(
         objective,
-        np.zeros(active.size),
+        x0,
         method="trf",
+        bounds=(lower_rad, upper_rad),
         max_nfev=cfg.max_nfev,
         verbose=2 if cfg.verbose else 0,
     )

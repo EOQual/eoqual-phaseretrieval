@@ -53,6 +53,7 @@ from .zernike_fit import (  # noqa: F401
     resolve_sign_ambiguity,
 )
 from .zernike_basis_orthogonal import ZernikeGramSchmidt, resolve_zernike_basis  # noqa: F401
+from .zernike_priors import build_prior_bounds, build_prior_penalty, feasible_start  # noqa: F401
 from .pupil import PupilGenerator  # noqa: F401
 from .diagnostics import (  # noqa: F401
     PSFMetrics,
@@ -85,6 +86,9 @@ __all__ = [
     "resolve_sign_ambiguity",
     "ZernikeGramSchmidt",
     "resolve_zernike_basis",
+    "build_prior_penalty",
+    "build_prior_bounds",
+    "feasible_start",
     "PupilGenerator",
     "PSFMetrics",
     "airy_psf",

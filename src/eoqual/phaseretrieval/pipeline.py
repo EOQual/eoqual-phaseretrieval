@@ -87,6 +87,9 @@ def psf_to_wfe(
     sign_prior: Optional[Tuple[int, float]] = None,
     # --- WFE haut ordre connue (optimization / phase_diversity) ---
     known_ho_wfe_path: Optional[Union[str, Path]] = None,
+    # --- A priori individuels par mode (optimization / phase_diversity) ---
+    zernike_priors: Optional[Dict[int, Tuple[float, float]]] = None,
+    zernike_bounds: Optional[Dict[int, Tuple[float, float]]] = None,
 ) -> Tuple[NDArray[np.float64], NDArray[np.float64], Dict[str, float]]:
     """
     End-to-end conversion **PSF -> Zernike (Noll) coefficients**.
@@ -205,6 +208,27 @@ def psf_to_wfe(
         ``REFERENCE_TECHNIQUE.md``). Ignored (with a warning) for
         ``"gerchberg_saxton"``, whose iteration has no low/high-order
         split to attach a fixed term to.
+    zernike_priors : dict, optional
+        [optimization, phase_diversity] Per-mode informative Bayesian
+        prior, ``{noll_index: (mean_nm, sigma_nm)}`` — added to the
+        residual vector as a per-mode L2 penalty (Gaussian MAP; a strict
+        generalisation of ``OpticalConfig.l2_reg``, see
+        :mod:`eoqual.phaseretrieval.zernike_priors` and §6.5bis of
+        ``REFERENCE_TECHNIQUE.md`` for the derivation and the important
+        caveat that a *decreasing-with-radial-order* prior, common in
+        ground-based astronomy (Kolmogorov turbulence statistics), is
+        **not** generally justified for a satellite instrument's own WFE
+        — priors here should come from an as-built model, a prior
+        calibration or an error budget, not from that generic assumption).
+        Ignored (with a warning) for ``"gerchberg_saxton"``. ``None``
+        (default) disables it.
+    zernike_bounds : dict, optional
+        [optimization, phase_diversity] Per-mode hard box constraint,
+        ``{noll_index: (low_nm, high_nm)}`` — the uniform-prior analogue of
+        ``zernike_priors`` (see same reference). Can be combined with
+        ``zernike_priors``. Ignored (with a warning) for
+        ``"gerchberg_saxton"``. ``None`` (default) leaves every mode
+        unbounded.
 
     Returns
     -------
@@ -236,6 +260,14 @@ def psf_to_wfe(
             "known_ho_wfe_path is ignored by method='gerchberg_saxton' "
             "(no low/high-order split to attach a fixed term to — see "
             "REFERENCE_TECHNIQUE.md §11.3/§2.2)."
+        )
+
+    if (zernike_priors or zernike_bounds) and method == "gerchberg_saxton":
+        logger.warning(
+            "zernike_priors/zernike_bounds is ignored by "
+            "method='gerchberg_saxton' (no explicit cost function on the "
+            "Zernike coefficients to penalise/bound — see "
+            "REFERENCE_TECHNIQUE.md §6.5bis)."
         )
 
     # ------------------------------------------------------------------
@@ -299,6 +331,8 @@ def psf_to_wfe(
             verbose=verbose,
             orthogonal_basis=orthogonal_basis,
             known_ho_wfe_nm=known_ho_wfe_nm,
+            zernike_priors=zernike_priors,
+            zernike_bounds=zernike_bounds,
         )
         coeffs_nm, diagnostics = fit_zernike_from_psf(psf, mask, opt_cfg)
 
@@ -327,6 +361,8 @@ def psf_to_wfe(
             verbose=verbose,
             orthogonal_basis=orthogonal_basis,
             known_ho_wfe_nm=known_ho_wfe_nm,
+            zernike_priors=zernike_priors,
+            zernike_bounds=zernike_bounds,
         )
         coeffs_nm, diagnostics = fit_phase_diversity(psf, psf_defocus, mask, pd_cfg)
 

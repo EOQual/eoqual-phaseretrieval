@@ -161,7 +161,36 @@
         seul sur une ouverture réellement décentrée (pour qu'un futur
         changement de ce contrat soit visible).
 
+    -   **A priori individuels par mode** (`zernike_priors`/
+        `zernike_bounds`, nouveau module
+        `zernike_priors.py`) sur `OpticalConfig`, `PhaseDiversityConfig` et
+        `psf_to_wfe(...)` : généralisation de `l2_reg` (a priori gaussien
+        centré sur zéro, poids uniforme) à un a priori **individuel** par
+        mode de Noll — moyenne et écart-type propres (`zernike_priors`,
+        pénalité L2 = MAP gaussien) ou borne dure (`zernike_bounds`, MAP à
+        prior uniforme). Dérivation complète (pourquoi une pénalité L2 et
+        une borne dure sont, mathématiquement, deux vocabulaires pour le
+        même MAP bayésien) dans `REFERENCE_TECHNIQUE.md` §6.5bis. Ignoré
+        (avec avertissement) pour `"gerchberg_saxton"`. Démonstration dans
+        `examples/psf2zernike_demo.ipynb` : sans a priori, un ajustement
+        mono-PSF à l'ordre 12 retombe sur la branche de signe inversé pour
+        les modes pairs (§3.7, $Z_4$/$Z_6$) ; un a priori individuel fort
+        et correct sur ces modes lève l'ambiguïté et débiaise
+        l'estimation, sans seconde image de diversité.
+    -   Correctif de robustesse (`zernike_priors.feasible_start`) :
+        démarrer un ajustement borné (`zernike_bounds`) exactement sur une
+        borne finie (ex. `(0.0, ...)`) dégradait la mise à l'échelle
+        interne de `scipy.optimize.least_squares(method="trf")` au point
+        de déclencher une convergence immédiate et fictive dès la première
+        évaluation, sans qu'aucune optimisation n'ait eu lieu — corrigé en
+        écartant le point de départ d'une borne finie sur laquelle il
+        tomberait exactement.
+
 ## Évolutions futures
 
 Voir `REFERENCE_TECHNIQUE.md` §11 (modèle système complet : détecteur,
 WFE haut ordre, filée, polychromatisme) et §6.5 (ajouter une méthode).
+La comparaison de performance `torch`/autograd vs. `scipy` (jacobien
+analytique ou backend autodiff optionnel) reste documentée en §6.5bis
+comme décision séparée, à ne prendre que si un besoin réel s'installe —
+voir les déclencheurs concrets qui y sont listés.

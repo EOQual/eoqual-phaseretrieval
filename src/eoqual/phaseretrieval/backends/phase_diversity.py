@@ -29,6 +29,7 @@ from scipy.optimize import least_squares
 
 from ..optics import phase_from_coefficients, psf_from_phase, wfe_map_to_phase
 from ..zernike_basis_orthogonal import resolve_zernike_basis
+from ..zernike_priors import build_prior_bounds, build_prior_penalty, feasible_start
 
 
 @dataclass(slots=True)
@@ -83,6 +84,29 @@ class PhaseDiversityConfig:
         ``REFERENCE_TECHNIQUE.md``). Same shape as the PSF/mask. Never
         optimised, exactly like ``defocus`` itself. ``None`` (default)
         disables it, reproducing the original model.
+    zernike_priors : dict, optional
+        Per-mode informative prior, as ``{noll_index: (mean_nm, sigma_nm)}``
+        — a Bayesian MAP Gaussian prior added to the residual vector as a
+        per-mode L2 penalty, exactly like
+        ``backends.optimization.OpticalConfig.zernike_priors`` (same helper,
+        :func:`eoqual.phaseretrieval.zernike_priors.build_prior_penalty`;
+        see its docstring and ``REFERENCE_TECHNIQUE.md`` §6.5bis for the
+        derivation). Unlike ``OpticalConfig``, there is no ``l2_reg`` here
+        to generalise from — this is the only prior mechanism on this
+        method. **Caveat specific to this method:** the pseudo-residuals
+        encoding the prior go through the *same* robust ``loss`` as the
+        data residuals (below) — the exact Gaussian-MAP equivalence holds
+        only for ``loss="linear"``; with the default ``"soft_l1"`` the
+        prior is effectively robustified too (large deviations from
+        ``mean_nm`` are penalised less than a pure quadratic would, same
+        rationale as robustifying the data term against outlier pixels).
+        ``None`` (default) disables it.
+    zernike_bounds : dict, optional
+        Per-mode hard box constraint, as
+        ``{noll_index: (low_nm, high_nm)}`` — a uniform-prior MAP,
+        equivalent in spirit to ``zernike_priors`` but as a hard bound
+        (:func:`eoqual.phaseretrieval.zernike_priors.build_prior_bounds`).
+        ``None`` (default) leaves every mode unbounded.
     """
     wavelength: float = 550e-9
     zernike_order: int = 36
@@ -94,6 +118,8 @@ class PhaseDiversityConfig:
     verbose: bool = True
     orthogonal_basis: bool = False
     known_ho_wfe_nm: Optional[NDArray[np.float64]] = None
+    zernike_priors: Optional[Dict[int, Tuple[float, float]]] = None
+    zernike_bounds: Optional[Dict[int, Tuple[float, float]]] = None
 
 
 def build_roi_mask(shape: Tuple[int, int], radius: int) -> NDArray[np.bool_]:
@@ -274,17 +300,36 @@ def fit_phase_diversity(
     )
     roi_mask = build_roi_mask(psf_focus.shape, cfg.roi_radius)
 
-    x0 = np.zeros(cfg.zernike_order - 3)
+    active = np.arange(3, cfg.zernike_order)
+
+    # A priori individuels par mode : même mécanisme que
+    # backends.optimization (voir zernike_priors.py et
+    # REFERENCE_TECHNIQUE.md §6.5bis pour la dérivation). active contient
+    # des positions de tableau 0-based -> +1 pour l'indexation Noll.
+    prior_mean_rad, prior_weight = build_prior_penalty(
+        cfg.zernike_priors or {}, active + 1, cfg.wavelength,
+    )
+    has_priors = np.any(prior_weight > 0.0)
+    lower_rad, upper_rad = build_prior_bounds(
+        cfg.zernike_bounds or {}, active + 1, cfg.wavelength,
+    )
+    x0 = feasible_start(lower_rad, upper_rad)
+
+    def objective(x: NDArray[np.float64]) -> NDArray[np.float64]:
+        r = residuals(x, psf_focus, psf_defocus, basis, mask, roi_mask, cfg)
+        if has_priors:
+            r = np.concatenate([r, prior_weight * (x - prior_mean_rad)])
+        return r
 
     result = least_squares(
-        residuals,
+        objective,
         x0=x0,
         method="trf",
         loss=cfg.loss,
         f_scale=1.0,
+        bounds=(lower_rad, upper_rad),
         max_nfev=cfg.max_nfev,
         verbose=2 if cfg.verbose else 0,
-        args=(psf_focus, psf_defocus, basis, mask, roi_mask, cfg),
     )
 
     coeffs_rad = np.zeros(cfg.zernike_order)

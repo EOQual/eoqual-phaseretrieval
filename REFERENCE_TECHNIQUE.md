@@ -178,7 +178,7 @@ $Z_4=55{,}0$ nm, $Z_5=27{,}5$ nm) rend ces ambiguïtés très concrètes :
 | **Error‑Reduction / Hybrid Input‑Output (HIO)** | Variantes de GS ; HIO introduit un terme de rétroaction $g_{k+1}=g_k-\beta g_k'$ hors du support pour éviter les stagnations. | Meilleure robustesse que GS pur ; paramètre de relaxation $\beta$ à régler (typ. 0,7–0,9). | Fienup (1978, 1982) [2, 5] |
 | **Ajustement direct par optimisation non linéaire** (*model‑based fitting*) | Les coefficients de Zernike sont les paramètres libres d'un modèle direct $\text{PSF}_{\text{modèle}}(\mathbf{c})$ ; on minimise $\lVert\sqrt{\text{PSF}_{\text{modèle}}}-\sqrt{\text{PSF}_{\text{mes}}}\rVert^2$ par moindres carrés (ex. Trust‑Region‑Reflective). | Déterministe, rapide à converger, paramétrisation de dimension réduite (quelques dizaines de coefficients au lieu d'un pixel par pixel) ; hérite des mêmes ambiguïtés qu'une seule PSF (piston/tilt/signe). | Branch, Coleman & Li (1999) pour TRF [6] ; formulation proche de Fienup (1993) [7] |
 | **Diversité de phase (*phase diversity*)** | On mesure **deux** (ou plus) PSF : une focalisée et une avec une aberration connue et volontairement introduite (typ. défocus). L'algorithme ajuste conjointement les deux images. | Résout l'ambiguïté de signe et de piston/tilt, améliore la stabilité ; nécessite un second cliché et de connaître précisément la diversité introduite. | Gonsalves (1982) [8] ; Paxman, Schulz & Fienup (1992) [9] |
-| **Maximum de vraisemblance / bayésien, pondération de bruit** | Formulation statistique qui pondère le résidu par le modèle de bruit (Poisson pour un détecteur à comptage de photons) et peut intégrer des a priori (ex. parcimonie sur les coefficients de Zernike). | Optimal statistiquement pour des PSF bruitées ; plus coûteux, nécessite de connaître le modèle de bruit. | Löfdahl & Scharmer (1994) [10] |
+| **Maximum de vraisemblance / bayésien, pondération de bruit et a priori individuels** | Formulation statistique qui pondère le résidu par le modèle de bruit (Poisson pour un détecteur à comptage de photons) et peut intégrer des a priori — globaux (parcimonie) ou **individuels, un par mode de Zernike** (valeur attendue ± incertitude, ex. issue d'une mesure de laboratoire ou d'un budget d'erreur), sous forme de pénalité L2 pondérée ou de contrainte de boîte. | Optimal statistiquement pour des PSF bruitées ; un a priori individuel bien choisi peut se substituer à une partie du rôle désambiguïsant d'une seconde image (§3.7), au prix d'un biais si l'a priori est faux. Plus coûteux, nécessite de connaître le modèle de bruit (et, pour la variante à a priori individuels, une incertitude par mode). | Löfdahl & Scharmer (1994) [10] |
 | **Pertes robustes (M‑estimateurs)** | Remplace le résidu quadratique par une fonction moins sensible aux valeurs aberrantes (`soft_l1`, `huber`) dans l'optimiseur. | Complément aux deux méthodes basées optimisation, utile en présence de pixels chauds / saturation / mauvais pixels. | Huber (1964) [11] |
 | **Approches linéarisées (OTF)** | On calcule l'OTF $= \mathcal{F}\{\text{PSF}\}$ ; le module de la pupille complexe est lié à $\sqrt{\text{OTF}}$, la phase se récupère par des méthodes linéaires (filtrage de Wiener, déconvolution). | Rapide, mais valable seulement pour de petites aberrations (approximation linéaire). | Goodman (2005), ch. 6 [4] |
 
@@ -206,12 +206,36 @@ choix dans un régime particulier.
   optique et le suivi de front d'onde du télescope spatial JWST en orbite,
   ainsi que dans plusieurs instruments solaires au sol. Rien d'historique
   ici.
-- **Maximum de vraisemblance / pondération de bruit (Poisson)** — c'est au
-  contraire le raffinement **le plus moderne** des méthodes précédentes,
-  de plus en plus pertinent avec les détecteurs à comptage de photons
-  (imagerie faible flux, exoplanètes en imagerie directe). Notre option
-  `poisson_weighting=True` de la diversité de phase (§6.3) *est* cette
-  approche.
+- **Maximum de vraisemblance / pondération de bruit (Poisson) et a priori
+  individuels** — c'est au contraire le raffinement **le plus moderne** des
+  méthodes précédentes, de plus en plus pertinent avec les détecteurs à
+  comptage de photons (imagerie faible flux, exoplanètes en imagerie
+  directe). Notre option `poisson_weighting=True` de la diversité de phase
+  (§6.3) *est* cette approche. **Précision (v. la remarque plus bas) :**
+  cette ligne n'est pas une évolution de l'ajustement direct par
+  optimisation (ligne du dessus) — c'est une évolution de la **diversité
+  de phase elle‑même** et de son traitement statistique du bruit, comme le
+  montrent ses propres références historiques (Paxman, Schulz & Fienup
+  1992 [9] ; Löfdahl & Scharmer 1994 [10] ; Idier, Mugnier & Blanc 2005
+  [16] ; Blanc, Mugnier & Idier 2003 [17], tous cités en diversité de
+  phase, §8.3) : le point de départ est toujours la fonction de coût
+  moindres carrés conjointe focus/défocus (§3, §4), à laquelle on
+  substitue une pondération statistiquement correcte du bruit, puis un a
+  priori. L'extension à un **a priori individuel par mode** (valeur
+  attendue ± incertitude, plutôt qu'une simple parcimonie globale) en est
+  la généralisation naturelle : elle prolonge à la fois ce traitement
+  statistique du bruit (§8.3) et le mécanisme de désambiguïsation par a
+  priori déjà présent dans le projet sous une forme simplifiée
+  (`sign_prior`, un signe sur un seul mode, §3.7) — vers un a priori
+  continu sur plusieurs modes à la fois. Poussée à l'extrême (a priori
+  individuel fort sur chaque mode, cf. l'usage `individual_constraint` de
+  la référence externe discutée en §6.5), cette généralisation peut même
+  se substituer à la seconde image de diversité pour la désambiguïsation —
+  ce qui en fait, dans ce cas limite, une manière de retrouver une partie
+  du bénéfice de la diversité de phase **à partir d'une seule PSF**, en
+  échangeant la mesure supplémentaire contre une connaissance a priori
+  externe (risque de biais si cet a priori est faux, à la différence d'une
+  vraie seconde mesure).
 - **Pertes robustes (`soft_l1`, `huber`)** — un bon réflexe d'ingénierie
   plutôt qu'une "méthode" : à activer par défaut dès que des données
   réelles (pixels chauds, saturation) sont utilisées à la place de
@@ -503,6 +527,177 @@ une démonstration interactive équivalente, à base des données
 4. Ajouter un test dans `tests/test_simulation_roundtrip.py` (simulation
    → nouvelle méthode → comparaison à `coeffs_nm` de vérité) et, si utile,
    une section de démonstration dans `examples/psf2zernike_demo.ipynb`.
+
+### 6.5bis A priori individuels par mode (`zernike_priors` / `zernike_bounds`)
+
+À la suite d'une revue de scripts externes (non intégrés au projet)
+implémentant des a priori individuels par mode via PyTorch/`torchmin`
+(minimisation à contraintes de boîte ou pénalité L2 autour d'une valeur
+attendue par mode), deux voies étaient envisageables : (a) une **option**
+sur les méthodes existantes, ou (b) un **4ᵉ backend**. Choix retenu et
+implémenté : **(a), une option** (module
+[`zernike_priors.py`](src/eoqual/phaseretrieval/zernike_priors.py), branché
+sur `OpticalConfig`/`PhaseDiversityConfig`/`psf_to_wfe`) — pour deux
+raisons indépendantes :
+
+- **Le modèle direct ne change pas.** Un a priori individuel par mode
+  n'est qu'un terme de pénalité $\sum_k w_k\,(c_k-\bar c_k)^2$ ajouté au
+  résidu (ou une borne par coefficient), au‑dessus du même
+  $\text{PSF}_{\text{modèle}}(\mathbf c)$ déjà utilisé par `"optimization"`
+  et `"phase_diversity"`. Ce n'est pas un changement de méthode au sens de
+  §6.5 (qui suppose un modèle direct ou une stratégie de résolution
+  différente) : c'est un terme de coût supplémentaire, paramétrable par
+  une nouvelle entrée de configuration (ex. `zernike_priors:
+  Dict[int, Tuple[float, float]]`, mode Noll → (valeur attendue nm,
+  écart‑type nm)) sur `OpticalConfig`/`PhaseDiversityConfig`, dans la même
+  veine que `sign_prior` (§3.7) déjà présent. Une pénalité L2 s'exprime
+  nativement comme des lignes supplémentaires du vecteur de résidus de
+  `scipy.optimize.least_squares` — aucune dépendance à un cadre
+  différentiable n'est nécessaire pour cette seule extension.
+- **Le gain de performance de l'implémentation PyTorch de référence n'est
+  pas lié à l'a priori, mais au jacobien.** Comparaison chronométrée
+  (`fit_zernike_from_psf` vs. un portage direct de `psf_from_phase` en
+  PyTorch + `torch.optim.LBFGS`, même pupille, même bruit, CPU) :
+
+  | Ordre de Zernike | scipy (`least_squares`, jacobien par différences finies) | PyTorch (rétropropagation) |
+  |---|---|---|
+  | 12 | 0,09 s | 0,05 s |
+  | 36 | 3,6 s | 0,05 s |
+  | 66 | 17–42 s | 0,11 s |
+
+  L'écart croît avec l'ordre (×70 à 36, ×270 à 66) pour une raison
+  structurelle : `least_squares` évalue le modèle direct par différences
+  finies pour construire son jacobien (coût par itération proportionnel au
+  nombre de coefficients libres), alors que la rétropropagation calcule un
+  gradient exact en une seule passe, à coût quasi indépendant du nombre de
+  paramètres. **Ce n'est donc pas une différence négligeable propre à ce
+  projet** (ordre ≤36 en pratique courante) : dès l'ordre 36 l'écart est
+  déjà d'un ordre de grandeur. Mais ce gain vient du calcul du gradient,
+  pas de la formulation bayésienne de l'a priori — ajouter un a priori
+  individuel ne le crée ni ne le supprime. Un futur passage à un jacobien
+  analytique (le modèle `psf_from_phase` est dérivable en forme close) ou
+  à l'autodiff (JAX/PyTorch) resterait donc une décision **séparée**, à
+  ne prendre que si un besoin réel s'installe (ordres bien supérieurs à
+  36, ajustements répétés en volume, ou GPU) — pas un prérequis pour
+  exploiter l'idée d'a priori individuels.
+
+**La logique, en détail (pourquoi ce n'est pas une nouvelle "méthode").**
+Une estimation MAP (maximum a posteriori) maximise
+$p(\mathbf c\mid\text{mesure})\propto p(\text{mesure}\mid\mathbf c)\,p(\mathbf c)$,
+donc minimise $-\log p(\text{mesure}\mid\mathbf c)-\log p(\mathbf c)$. Avec un
+bruit gaussien, $-\log p(\text{mesure}\mid\mathbf c)=\lVert\text{modèle}-\text{mesure}\rVert^2$
+— le moindres‑carrés déjà utilisé partout dans ce projet. Avec un a priori
+**gaussien** par mode $c_k\sim\mathcal N(\bar c_k,\sigma_k^2)$,
+$-\log p(\mathbf c)=\sum_k(c_k-\bar c_k)^2/\sigma_k^2$ — une **pénalité L2**.
+Avec un a priori **uniforme** sur $[\text{low}_k,\text{high}_k]$ (nul en
+dehors), $-\log p(\mathbf c)$ vaut $0$ à l'intérieur et $+\infty$ en dehors
+— une **contrainte de boîte**. Un MAP gaussien et un moindres‑carrés
+pénalisé L2 ne sont donc pas deux méthodes différentes : c'est **la même
+formule**, écrite dans deux vocabulaires (statistique / numérique) ; de
+même pour un MAP à prior uniforme et une borne dure.
+
+`OpticalConfig.l2_reg` (§6.3 plus haut) est déjà un **cas particulier** de
+ce mécanisme : un a priori gaussien centré sur **zéro**, avec le **même**
+poids pour tous les modes. `zernike_priors`/`zernike_bounds` généralisent
+ce cas particulier à un a priori **individuel** (moyenne et poids propres
+à chaque mode), sous forme de pénalité ou de borne dure. Concrètement,
+`zernike_priors`/`zernike_bounds` ajoutent des lignes supplémentaires au
+vecteur de résidus de `scipy.optimize.least_squares` (même mécanisme que
+`l2_reg`) et, pour les bornes, un `bounds=` natif à `least_squares`
+(inutilisé jusqu'ici) — voir
+[`zernike_priors.build_prior_penalty`](src/eoqual/phaseretrieval/zernike_priors.py)/
+[`build_prior_bounds`](src/eoqual/phaseretrieval/zernike_priors.py) pour le
+détail des conversions nm ↔ rad et
+[`feasible_start`](src/eoqual/phaseretrieval/zernike_priors.py) pour un
+piège évité (démarrer *exactement* sur une borne finie, ex.
+`(0.0, 400.0)`, dégénère la mise à l'échelle interne de `trf` et peut faire
+déclarer au solveur une convergence immédiate et fictive — corrigé en
+écartant légèrement le point de départ d'une borne sur laquelle il
+tomberait).
+
+**Exemple d'usage** — un a priori individuel de laboratoire (mesure
+interférométrique préalable, incertaine) sur le sphérique ($Z_{11}$), et
+une borne physique large sur le défocus ($Z_4$, jamais négatif dans ce
+montage) :
+
+```python
+from eoqual.phaseretrieval import OpticalConfig, fit_zernike_from_psf
+
+cfg = OpticalConfig(
+    wavelength=550e-9,
+    zernike_order=36,
+    zernike_priors={11: (8.0, 3.0)},   # Z11 = 8 nm ± 3 nm (a priori labo)
+    zernike_bounds={4: (0.0, 500.0)},  # Z4 physiquement dans [0, 500] nm
+)
+coeffs_nm, diagnostics = fit_zernike_from_psf(psf, mask, cfg)
+```
+
+Même API sur `PhaseDiversityConfig`/`psf_to_wfe(zernike_priors=...,
+zernike_bounds=...)`. Un mode absent des deux dictionnaires reste libre,
+sans pénalité — comportement historique inchangé par défaut (`None`).
+Voir `examples/psf2zernike_demo.ipynb`, section « Fonctionnalités
+avancées », pour une démonstration exécutable (y compris le cas où un a
+priori fort désambiguïse/débiaise un ajustement autrement mal contraint).
+
+**Mise en garde — d'où doit venir un a priori, dans ce contexte.** Rien
+n'empêche techniquement d'utiliser `zernike_priors` pour encoder une
+hypothèse générique du type « les modes de haut ordre radial ont une
+amplitude décroissante » (courante en optique adaptative sol, où elle vient
+de la statistique de turbulence de Kolmogorov — la variance du coefficient
+de Noll $j$ décroît comme une loi de puissance de l'ordre radial, résultat
+de Noll 1976). **Cette hypothèse n'est en général pas justifiée pour la
+WFE propre d'un instrument d'observation de la Terre** (§8) : contrairement
+à la turbulence atmosphérique, la WFE statique d'un instrument spatial
+(fabrication, assemblage, thermo‑élastique en orbite) n'a aucune raison de
+suivre un spectre de Kolmogorov — elle peut être dominée par quelques modes
+bas ordre (défauts d'alignement), ou porter une contribution haut ordre
+significative et localisée (print‑through d'un miroir allégé, réplique de
+polissage) sans décroissance monotone. Un a priori raisonnable dans ce
+contexte doit venir d'une source **spécifique à l'instrument** — modèle
+optique as‑built, budget d'erreur, calibration sol/vol antérieure (§8.2) —
+et non d'une décroissance générique empruntée à la littérature de
+turbulence atmosphérique ; à défaut d'une telle source, préférer
+`l2_reg` (a priori faible et neutre, sans favoriser arbitrairement une
+forme de spectre) à un `zernike_priors` inventé.
+
+**Déclencheurs concrets** (pour ne plus avoir à rouvrir la question à
+chaque fois) — passer à un jacobien analytique ou à l'autodiff dès que
+**l'un** de ces critères devient vrai en usage réel (pas en exploration) :
+
+- `zernike_order` routinier > ~40 (le point où l'écart chronométré ci‑dessus
+  dépasse ~×70, tableau ci‑dessus) ;
+- volume : ajustements répétés en série (monitoring image par image,
+  campagne de calibration multi‑poses) où le temps cumulé devient un facteur
+  opérationnel, même à ordre modéré ;
+- un GPU est déjà disponible dans l'environnement cible (le gain
+  d'autodiff se cumule alors avec le parallélisme matériel).
+
+**Ce qu'il faudrait concrètement**, par ordre de coût croissant :
+
+1. **Jacobien analytique dans `scipy`, sans nouvelle dépendance** — à
+   tenter en premier. `psf_from_phase` est une fonction analytique fermée
+   des coefficients (FFT d'une exponentielle complexe) ; le jacobien de
+   $\sqrt{\text{PSF}_{\text{modèle}}}$ par rapport à $\mathbf c$ se dérive
+   en forme close et se passe à `least_squares(..., jac=...)` — supprime
+   l'évaluation par différences finies sans quitter numpy/scipy. Récupère
+   une bonne partie du gain observé sans ajouter de dépendance ; à évaluer
+   avant l'option suivante.
+2. **Backend autodiff optionnel** (PyTorch ou JAX) — seulement si (1) ne
+   suffit pas. Éléments nécessaires : un port différentiable de
+   `phase_from_coefficients`/`psf_from_phase` (FFT complexe, déjà supportée
+   nativement par l'autodiff des deux bibliothèques) ; un nouveau backend
+   `backends/<nom>.py` suivant le patron de §6.5 (même signature
+   `fit_...(psf, mask, cfg) -> (coeffs_nm, diagnostics)`, pour rester
+   interchangeable via `psf_to_wfe(method=...)`) ; la dépendance ajoutée en
+   **extra optionnel** de `pyproject.toml` (ex. `poetry install -E torch`),
+   pas en dépendance de base, pour ne pas alourdir l'installation par
+   défaut (§6.5bis, comparatif de dépendances) ; un test de non‑régression
+   comparant les coefficients récupérés à ceux de `"optimization"` sur un
+   même cas simulé (`tests/test_simulation_roundtrip.py`), pour garantir
+   l'équivalence numérique avant d'en faire une alternative de confiance ;
+   et un test de performance chronométré (le tableau ci‑dessus, codifié en
+   test plutôt qu'en observation ponctuelle) pour objectiver le
+   déclencheur plus haut au lieu de le réargumenter qualitativement.
 
 ### 6.6 Interface en ligne de commande
 
@@ -1276,7 +1471,7 @@ avec une marge de zéros) reste à faire manuellement (voir
 > identifiées par recherche bibliographique ciblée (titres, auteurs,
 > revues/actes et années confirmés) plutôt que par lecture intégrale des
 > articles. Les références [18]–[20] proviennent de la docstring d'un
-> prototype externe au dépôt (`Star/star_PSF/psf_star_V2d.py`) et n'ont pas été re-vérifiées indépendamment cette fois-ci.
+> prototype antérieur de l'auteur (non conservé) et n'ont pas été re-vérifiées indépendamment.
 > Dans tous les cas, les détails quantitatifs qu'elles contiennent restent
 > à vérifier directement dans les textes avant citation dans un document
 > externe à ce projet.
