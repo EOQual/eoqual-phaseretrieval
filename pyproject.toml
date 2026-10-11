@@ -20,6 +20,9 @@ exclude = [
 
 [tool.poetry.dependencies]
 python = ">=3.10,<4.0"
+# PSF de référence, Strehl, profil radial, épinglés sur une version : voir
+# les règles de stabilité d'eoqual-core.
+eoqual-core = {git = "https://github.com/EOQual/eoqual-core.git", tag = "v0.1.0"}
 numpy = "*"
 scipy = "*"
 scikit-image = "*"

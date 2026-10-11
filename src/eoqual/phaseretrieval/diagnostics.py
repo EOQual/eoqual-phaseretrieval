@@ -11,21 +11,26 @@ de lancer une méthode de récupération de phase (§1 et nouvelle §9 de
 ``REFERENCE_TECHNIQUE.md``), ou pour comparer plusieurs méthodes
 entre elles sur un pied d'égalité.
 
-Origine : portage, adapté au style et aux conventions de ce projet
-(NumPy docstrings, typing, réutilisation de ``optics.py``), des utilitaires
-``PSFAnalyzer``/``PSFMetrics`` développés dans le prototype
-``Star/star_PSF/psf_star_V2d.py`` (répertoire fourre-tout hors dépôt).
+Origine : utilitaires ``PSFAnalyzer``/``PSFMetrics`` d'un prototype
+antérieur de l'auteur, adaptés au style et aux conventions de ce projet
+(NumPy docstrings, typing, réutilisation de ``optics.py``).
+
+``airy_psf``, ``strehl_ratio`` et ``radial_profile`` délèguent à
+``eoqual.core.psf`` (partagé avec eoqual-measure) ; ``strehl_ratio``
+garde ici son avertissement via loguru.
 """
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
 from loguru import logger
 from numpy.typing import NDArray
-from scipy.special import j1
+
+from eoqual.core import psf as core_psf
 
 
 def airy_psf(
@@ -55,21 +60,7 @@ def airy_psf(
     NDArray
         Airy PSF, shape ``shape``, normalised so that its sum is 1.
     """
-    ny, nx = shape
-    cy, cx = (ny - 1) / 2.0, (nx - 1) / 2.0
-
-    y, x = np.indices(shape)
-    r_pix = np.sqrt((x - cx) ** 2 + (y - cy) ** 2)
-    r_rad = r_pix * pixel_scale
-
-    k = np.pi * diameter / wavelength
-    kr = k * r_rad
-
-    psf = np.ones_like(kr)
-    nonzero = kr != 0
-    psf[nonzero] = (2 * j1(kr[nonzero]) / kr[nonzero]) ** 2
-
-    return psf / psf.sum()
+    return core_psf.airy_psf(shape, wavelength, diameter, pixel_scale)
 
 
 def pixel_scale_from_pixel_pitch(pixel_pitch_m: float, focal_length_m: float) -> float:
@@ -128,7 +119,9 @@ def strehl_ratio(
     actually produced) rather than an unusually good optic — a warning is
     logged in that case so the mismatch isn't mistaken for a result.
     """
-    strehl = float(psf_measured.max() / psf_reference.max())
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")  # signalé ci-dessous via loguru
+        strehl = core_psf.strehl_ratio(psf_measured, psf_reference)
     if strehl > 1.02:
         logger.warning(
             f"Strehl = {strehl:.3f} > 1 : la référence Airy n'est probablement pas "
@@ -187,14 +180,7 @@ def radial_profile(psf: NDArray[np.float64]) -> NDArray[np.float64]:
     NDArray
         1-D profile, mean value per integer-pixel radius from the centre.
     """
-    y, x = np.indices(psf.shape)
-    cy, cx = (np.array(psf.shape) - 1) / 2.0
-    r = np.sqrt((x - cx) ** 2 + (y - cy) ** 2).astype(int)
-
-    tbin = np.bincount(r.ravel(), psf.ravel())
-    nr = np.bincount(r.ravel())
-
-    return tbin / np.maximum(nr, 1)
+    return core_psf.radial_profile(psf)
 
 
 def compute_mtf(psf: NDArray[np.float64]) -> NDArray[np.float64]:
