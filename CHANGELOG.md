@@ -2,6 +2,11 @@
 
 ## Version History
 
+Non publié
+
+:   -   `license.txt` : titulaire des droits (Olivier Amram) au lieu du
+        nom du module.
+
 0.1.0 (2026-09-08)
 
 :   -   Première version publique.
