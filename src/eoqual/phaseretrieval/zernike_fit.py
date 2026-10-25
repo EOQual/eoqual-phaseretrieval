@@ -44,10 +44,17 @@ class ZernikeConfig:
         orthogonal there, which degrades ``condition_number`` and mixes
         the physical meaning of each coefficient. ``False`` (default)
         keeps the historical behaviour unchanged.
+    aperture_px : int, optional
+        Diameter [px] of the aperture within ``pupil_mask``, when it does
+        not fill the whole array — see
+        ``zernike_basis_orthogonal.resolve_zernike_basis`` and §12.5 of
+        ``REFERENCE_TECHNIQUE.md``. ``None`` (default): the aperture fills
+        the array (historical behaviour).
     """
     order: int = 36
     wavelength: float = 550e-9
     orthogonal_basis: bool = False
+    aperture_px: Optional[int] = None
 
 
 def fit_zernike(
@@ -98,7 +105,7 @@ def fit_zernike(
     # this mask if zern_cfg.orthogonal_basis — see ZernikeConfig docstring).
     basis = resolve_zernike_basis(
         npix=npix, nterms=zern_cfg.order, mask=pupil_mask,
-        orthogonalize=zern_cfg.orthogonal_basis,
+        orthogonalize=zern_cfg.orthogonal_basis, aperture_px=zern_cfg.aperture_px,
     )
 
     # Design matrix
@@ -252,6 +259,7 @@ def project_orthogonal_to_standard(
     wavelength: float,
     *,
     order: Optional[int] = None,
+    aperture_px: Optional[int] = None,
 ) -> Tuple[NDArray[np.float64], NDArray[np.float64], Dict[str, float]]:
     """
     Re-express Gram-Schmidt-basis coefficients on the standard Noll basis.
@@ -297,6 +305,11 @@ def project_orthogonal_to_standard(
         the natural choice, since that is exactly the subspace the phase
         lies in; a higher value cannot recover information that was never
         fitted, and would only add unconstrained standard modes.
+    aperture_px : int, optional
+        Diameter [px] of the aperture within ``mask``, if it does not fill
+        the whole array — must match the ``aperture_px`` used to build
+        ``orthogonal_basis`` itself. ``None`` (default): the aperture
+        fills the array (historical behaviour).
 
     Returns
     -------
@@ -318,5 +331,6 @@ def project_orthogonal_to_standard(
 
     zern_cfg = ZernikeConfig(
         order=order or orthogonal_basis.shape[0], wavelength=wavelength, orthogonal_basis=False,
+        aperture_px=aperture_px,
     )
     return fit_zernike(phase_rad, mask, zern_cfg)

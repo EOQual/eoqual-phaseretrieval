@@ -17,8 +17,10 @@ licences des dépendances tierces.
 2. [Démarrage rapide](#démarrage-rapide)
 3. [Catalogue des méthodes](#catalogue-des-méthodes)
 4. [Simulation](#simulation)
-5. [Licence](#licence)
-6. [Contribuer](#contribuer)
+5. [Interface en ligne de commande](#interface-en-ligne-de-commande)
+6. [Organisation du code](#organisation-du-code)
+7. [Licence](#licence)
+8. [Contribuer](#contribuer)
 
 ---
 
@@ -141,6 +143,180 @@ Voir `tests/test_simulation_roundtrip.py`/`tests/test_simulation_orthogonal.py`/
 récupération de phase → comparaison à la vérité terrain) et
 [REFERENCE_TECHNIQUE.md](REFERENCE_TECHNIQUE.md) §6.4/§9 pour la
 discussion du modèle de bruit.
+
+## Interface en ligne de commande
+
+Les trois méthodes partagent le même point d'entrée en ligne de commande
+(`python -m eoqual.phaseretrieval.pipeline ...`), sélectionné par
+`--method`.
+
+```text
+usage: -c [-h] --psf PSF --mask MASK --output OUTPUT
+          [--method {gerchberg_saxton,optimization,phase_diversity}]
+          [--wavelength WAVELENGTH] [--focal_length FOCAL_LENGTH]
+          [--pupil_diameter PUPIL_DIAMETER] [--pixel_pitch PIXEL_PITCH]
+          [--oversampling OVERSAMPLING] [--zernike_order ZERNIKE_ORDER]
+          [--mask_no_binarize]
+          [--mask_native_aperture_px MASK_NATIVE_APERTURE_PX]
+          [--ho_native_aperture_px HO_NATIVE_APERTURE_PX]
+          [--mask_native_aperture_center ROW COL]
+          [--ho_native_aperture_center ROW COL]
+          [--aperture_threshold APERTURE_THRESHOLD] [--orthogonal_basis]
+          [--max_iter MAX_ITER] [--beta BETA] [--seed SEED]
+          [--fit_piston_tilt] [--diversity DIVERSITY] [--defocus DEFOCUS]
+          [--roi_radius ROI_RADIUS] [--loss LOSS] [--poisson_weighting]
+          [--sign_prior_index SIGN_PRIOR_INDEX]
+          [--sign_prior_sign SIGN_PRIOR_SIGN] [--known_ho_wfe KNOWN_HO_WFE]
+          [--config_json CONFIG_JSON]
+
+Recover Zernike (Noll) coefficients from one or two PSF using a binary pupil
+mask.
+
+options:
+  -h, --help            show this help message and exit
+  --psf PSF             Path to the PSF image
+  --mask MASK           Path to the binary pupil mask image
+  --output OUTPUT       Répertoire de sortie des résultats.
+  --method {gerchberg_saxton,optimization,phase_diversity}
+                        Phase-retrieval algorithm (default gerchberg_saxton).
+  --wavelength WAVELENGTH
+                        Wavelength in metres (default 550 nm)
+  --focal_length FOCAL_LENGTH
+                        Focal length in metres
+  --pupil_diameter PUPIL_DIAMETER
+                        Pupil diameter in metres
+  --pixel_pitch PIXEL_PITCH
+                        Native detector pixel pitch in metres
+  --oversampling OVERSAMPLING
+                        Oversampling factor of --psf (and --diversity)
+                        relative to native detector sampling, e.g. 4 for a
+                        super-resolved PSF (default 1: already at native
+                        resolution).
+  --zernike_order ZERNIKE_ORDER
+                        Maximum Zernike Noll order
+  --mask_no_binarize    Keep the mask as a graded [0,1] transmission after
+                        resampling instead of thresholding it to strict {0,1}
+                        (default: binarize).
+  --mask_native_aperture_px MASK_NATIVE_APERTURE_PX
+                        Aperture's own pixel span within --mask, if it has a
+                        zero margin around it rather than filling the file
+                        edge to edge (default: auto-detected from the pixel
+                        content, see --aperture_threshold).
+  --ho_native_aperture_px HO_NATIVE_APERTURE_PX
+                        Same as --mask_native_aperture_px, for --known_ho_wfe.
+  --mask_native_aperture_center ROW COL
+                        Pixel coordinates of the aperture's centre within
+                        --mask, only if --mask_native_aperture_px is given and
+                        the aperture is NOT centred in the file (default:
+                        assume it is centred).
+  --ho_native_aperture_center ROW COL
+                        Same as --mask_native_aperture_center, for
+                        --known_ho_wfe / --ho_native_aperture_px.
+  --aperture_threshold APERTURE_THRESHOLD
+                        Fraction of the mask's/HO map's own maximum value
+                        above which a pixel counts as part of the aperture,
+                        for auto-detecting its margin. Ignored wherever
+                        *_native_aperture_px is given.
+  --orthogonal_basis    Fit on a Gram-Schmidt basis re-orthogonalised on the
+                        actual pupil mask instead of the standard Noll basis
+                        (recommended for an obstructed pupil: central
+                        obstruction, spiders).
+  --max_iter MAX_ITER   [gerchberg_saxton] Number of GS iterations
+  --beta BETA           [gerchberg_saxton] Relaxation factor
+  --seed SEED           [gerchberg_saxton] RNG seed (reproducible runs)
+  --fit_piston_tilt     [optimization] Also fit piston/tip/tilt (Z1-Z3).
+  --diversity DIVERSITY
+                        [phase_diversity] Path to the second (defocused) PSF.
+  --defocus DEFOCUS     [phase_diversity] Known defocus in metres
+  --roi_radius ROI_RADIUS
+                        [phase_diversity] ROI half-width in pixels
+  --loss LOSS           [phase_diversity] Robust loss function
+  --poisson_weighting   [phase_diversity] Weight residuals by shot-noise
+                        (default on).
+  --sign_prior_index SIGN_PRIOR_INDEX
+                        [gerchberg_saxton, optimization] Noll index of an
+                        even-m mode with a known sign (e.g. 4 for defocus).
+  --sign_prior_sign SIGN_PRIOR_SIGN
+                        [gerchberg_saxton, optimization] Expected sign (+1 or
+                        -1) of --sign_prior_index.
+  --known_ho_wfe KNOWN_HO_WFE
+                        [optimization, phase_diversity] Path to a known, fixed
+                        high-order WFE map [nm], at its own native resolution,
+                        added to the model without being optimised. Ignored
+                        for gerchberg_saxton.
+  --config_json CONFIG_JSON
+                        Optionnel: fichier JSON de config
+```
+
+(Sortie de `python -m eoqual.phaseretrieval.pipeline --help`, figée ici
+pour référence — peut légèrement dériver de la version installée ; voir
+`CHANGELOG.md` pour l'historique des options ajoutées.)
+
+**Non exposé en CLI, API Python uniquement** : `zernike_priors`/
+`zernike_bounds` (a priori individuels par mode, §6.5bis) et
+`aperture_px` côté simulation (§12.5) — seulement `psf_to_wfe(...)`/
+`OpticalConfig`/`PhaseDiversityConfig`/les fonctions de
+`eoqual.phaseretrieval.simulation`.
+
+Exemples d'invocation :
+
+```bash
+# Gerchberg-Saxton
+python -m eoqual.phaseretrieval.pipeline --method gerchberg_saxton \
+    --psf data/psf_simu.tiff --mask data/mask_simu.tiff --output output \
+    --zernike_order 15 --max_iter 300 --seed 2
+
+# Optimisation directe
+python -m eoqual.phaseretrieval.pipeline --method optimization \
+    --psf data/psf_simu.tiff --mask data/mask_simu.tiff --output output \
+    --zernike_order 15
+
+# Diversité de phase (2 PSF)
+python -m eoqual.phaseretrieval.pipeline --method phase_diversity \
+    --psf data/psf_simu.tiff --diversity data/psf_diversity_simu.tiff \
+    --mask data/mask_simu.tiff --output output \
+    --zernike_order 15 --defocus 275e-9 --roi_radius 32
+```
+
+## Organisation du code
+
+```
+src/eoqual/phaseretrieval/
+    io_utils.py                    # chargement image/masque, enveloppes Plotly spécifiques
+    optics.py                      # base de Zernike, phase -> PSF (modèle direct)
+    zernike_fit.py                 # décomposition d'une carte de phase (Noll) + project_orthogonal_to_standard
+    zernike_priors.py              # a priori individuels par mode (§6.5bis)
+    pipeline.py                    # psf_to_wfe(method=...) + CLI
+    config.py                      # registre METHODS_CONFIGS
+    runner.py                      # list_methods()
+    zernike_basis_orthogonal.py    # ZernikeGramSchmidt + resolve_zernike_basis (§10)
+    pupil.py                       # pupilles disque/annulaire/araignées, polar_grid (§12.5)
+    diagnostics.py                 # Strehl, WFE (Maréchal), FTM (axe fe, fc, coupes), ellipticité ;
+                                    # FWHM/énergie encerclée délégués à eoqual-core (§9)
+    backends/
+        gerchberg_saxton.py        # Gerchberg-Saxton                  (1 PSF)
+        optimization.py            # optimisation directe              (1 PSF)
+        phase_diversity.py         # diversité de phase modale         (2 PSF)
+    simulation/                    # module de simulation (voir "Simulation" plus haut)
+        psf_simulator.py
+        phase_diversity_simulator.py
+        noise.py
+examples/
+    psf2zernike_demo.ipynb         # démonstration + validation
+    simu_psf_mask.ipynb            # génération de data/*_simu.tiff (Bayer multi-bande)
+```
+
+`optics.py` et `zernike_fit.py` sont les briques partagées : les deux
+méthodes par optimisation (`backends/optimization.py`,
+`backends/phase_diversity.py`) s'appuient sur `optics.phase_from_coefficients`
+et `optics.psf_from_phase` pour évaluer leur modèle direct à chaque
+itération du solveur ; `backends/gerchberg_saxton.py` n'en a pas besoin
+(il travaille directement sur la phase pixel à pixel) mais passe par
+`zernike_fit.py` *après coup* pour produire des coefficients comparables
+aux deux autres méthodes. Les fonctions graphiques génériques (heatmap
+2D, comparaison de courbes/coupes) vivent dans
+[eoqual-viz](https://github.com/EOQual/eoqual-viz), pas ici — voir
+[REFERENCE_TECHNIQUE.md](REFERENCE_TECHNIQUE.md) §6.1.
 
 ## Licence
 

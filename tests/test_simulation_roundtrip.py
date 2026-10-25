@@ -134,3 +134,29 @@ def test_optimization_runs_on_noisy_psf_with_negative_pixels():
     # attendue (§3.7) — le point vérifié ici est l'absence de crash/NaN,
     # pas la résolution du signe.
     assert abs(_corr(coeffs_nm[3:], sim["coeffs_nm"][3:])) > 0.8
+
+
+def test_simulation_aperture_px_round_trips_without_bias():
+    """
+    Suréchantillonnage en mémoire (``aperture_px`` < ``npix``, §12.5 de
+    REFERENCE_TECHNIQUE.md) : la simulation ET l'ajustement doivent
+    utiliser le même ``aperture_px`` pour que la vérité recouvrée ne soit
+    pas biaisée (régression du bug corrigé : sans ce réglage cohérent, la
+    base de Zernike serait mal échelonnée par rapport à l'ouverture
+    réelle).
+    """
+    npix, aperture_px = 128, 64
+    sim = simulate_psf_from_zernike(
+        TRUTH_NM, wavelength=WAVELENGTH, npix=npix, zernike_order=ZERNIKE_ORDER,
+        aperture_px=aperture_px,
+    )
+    assert sim["mask"].sum() < 0.3 * npix * npix  # ouverture bien plus petite que le cadre
+
+    cfg = OpticalConfig(
+        wavelength=WAVELENGTH, zernike_order=ZERNIKE_ORDER, verbose=False, aperture_px=aperture_px,
+    )
+    coeffs_nm, diagnostics = fit_zernike_from_psf(sim["psf"], sim["mask"], cfg)
+
+    assert diagnostics["cost"] < 1e-6
+    assert abs(coeffs_nm[3]) == pytest.approx(55.0, abs=1.0)
+    assert abs(coeffs_nm[4]) == pytest.approx(27.5, abs=1.0)

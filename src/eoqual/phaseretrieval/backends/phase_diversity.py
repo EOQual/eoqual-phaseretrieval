@@ -75,6 +75,12 @@ class PhaseDiversityConfig:
         ``REFERENCE_TECHNIQUE.md``) instead of the standard Noll basis —
         recommended for an obstructed pupil (central obstruction,
         spiders). ``False`` (default) keeps the historical behaviour.
+    aperture_px : int, optional
+        Diameter [px] of the aperture within ``mask``, when it does not
+        fill the whole array — see
+        ``backends.optimization.OpticalConfig.aperture_px`` and §12.5 of
+        ``REFERENCE_TECHNIQUE.md``. ``None`` (default): the aperture fills
+        the array (historical behaviour).
     known_ho_wfe_nm : NDArray, optional
         Known, **fixed** wavefront-error map [nm] — typically a high-order
         (HO) contribution beyond ``zernike_order``, measured independently
@@ -117,6 +123,7 @@ class PhaseDiversityConfig:
     max_nfev: Optional[int] = None
     verbose: bool = True
     orthogonal_basis: bool = False
+    aperture_px: Optional[int] = None
     known_ho_wfe_nm: Optional[NDArray[np.float64]] = None
     zernike_priors: Optional[Dict[int, Tuple[float, float]]] = None
     zernike_bounds: Optional[Dict[int, Tuple[float, float]]] = None
@@ -296,7 +303,7 @@ def fit_phase_diversity(
     """
     basis = resolve_zernike_basis(
         npix=psf_focus.shape[0], nterms=cfg.zernike_order, mask=mask,
-        orthogonalize=cfg.orthogonal_basis,
+        orthogonalize=cfg.orthogonal_basis, aperture_px=cfg.aperture_px,
     )
     roi_mask = build_roi_mask(psf_focus.shape, cfg.roi_radius)
 

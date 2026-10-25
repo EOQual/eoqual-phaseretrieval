@@ -196,7 +196,12 @@ def test_end_to_end_mask_and_ho_wfe_at_different_native_resolutions_still_recove
 
     # Vérité bas ordre + carte HO (déjà co-enregistrée), simulées sur la
     # grille de travail avec le masque tel que la bibliothèque le voit.
-    basis = build_zernike_basis(npix=npix_psf, nterms=25)
+    # aperture_px=n_pup : l'ouverture n'occupe qu'une partie de npix_psf
+    # (oversampling=2) — sans ce réglage la base serait évaluée comme si
+    # l'ouverture remplissait tout le cadre, un décalage d'échelle
+    # silencieux avec le masque réellement utilisé (voir §12.5 de
+    # REFERENCE_TECHNIQUE.md, correctif historique de ce test).
+    basis = build_zernike_basis(npix=npix_psf, nterms=25, aperture_px=n_pup)
     low_coeffs = np.zeros(25)
     low_coeffs[3], low_coeffs[4] = truth_nm[4], truth_nm[5]
 
@@ -333,7 +338,8 @@ def test_end_to_end_padded_mask_and_ho_wfe_recover_truth(tmp_path):
         pixel_pitch=PIXEL_PITCH,
     )
 
-    basis = build_zernike_basis(npix=npix_psf, nterms=25)
+    # aperture_px=n_pup : voir le commentaire équivalent du test précédent.
+    basis = build_zernike_basis(npix=npix_psf, nterms=25, aperture_px=n_pup)
     low_coeffs = np.zeros(25)
     low_coeffs[3], low_coeffs[4] = truth_nm[4], truth_nm[5]
     total_phase_rad = (
@@ -438,3 +444,136 @@ def test_native_aperture_center_out_of_bounds_raises(tmp_path):
             wavelength=WAVELENGTH, focal_length=FOCAL_LENGTH, pupil_diameter=PUPIL_DIAMETER,
             pixel_pitch=PIXEL_PITCH, native_aperture_px=200, native_aperture_center=(10, 10),
         )
+
+
+# ----------------------------------------------------------------------
+# Masque déjà à la résolution de la PSF (même taille de tableau), mais
+# avec une marge de zéros autour de l'ouverture quand même.
+# ----------------------------------------------------------------------
+
+def test_same_shape_mask_without_margin_keeps_historical_behaviour(tmp_path):
+    """Le cas historique (le plus courant) : même taille que la PSF, et
+    l'ouverture remplit effectivement tout le cadre -- N_pup_target=None,
+    masque inchangé, comme avant ce correctif."""
+    npix = 256
+    full_mask = PupilGenerator(npix).simple_disk()
+    mask_path = _write_tiff(tmp_path, "mask_full.tiff", full_mask)
+
+    mask, n_pup_target = load_and_prepare_mask(
+        psf_shape=(npix, npix), mask_path=mask_path,
+        wavelength=WAVELENGTH, focal_length=FOCAL_LENGTH, pupil_diameter=PUPIL_DIAMETER,
+        pixel_pitch=PIXEL_PITCH,
+    )
+    assert n_pup_target is None
+    np.testing.assert_array_equal(mask, full_mask)
+
+
+def test_same_shape_mask_with_margin_is_detected_and_cropped(tmp_path):
+    """
+    Le cas posé en question : le fichier masque fait déjà la même taille
+    de tableau que la PSF (même résolution, donc le raccourci "pas de mise
+    à l'échelle physique" s'applique), mais l'ouverture elle-même n'en
+    occupe qu'une partie, entourée de zéros. Avant ce correctif, cette
+    marge n'était jamais détectée dans ce cas précis (seulement quand la
+    résolution différait) : l'ouverture était silencieusement supposée
+    remplir tout le cadre.
+    """
+    npix = 256
+    padded_mask = _padded_disk(canvas_size=npix, aperture_size=160)
+    mask_path = _write_tiff(tmp_path, "mask_same_res_padded.tiff", padded_mask)
+
+    mask, n_pup_target = load_and_prepare_mask(
+        psf_shape=(npix, npix), mask_path=mask_path,
+        wavelength=WAVELENGTH, focal_length=FOCAL_LENGTH, pupil_diameter=PUPIL_DIAMETER,
+        pixel_pitch=PIXEL_PITCH,
+    )
+    # La marge est bien détectée (pas None) et correspond à l'ouverture
+    # réelle (160 px), pas au cadre entier (256 px) ni à une valeur issue
+    # d'un calcul physique (aucune mise à l'échelle n'a eu lieu ici).
+    assert n_pup_target == 160
+    assert mask.shape == (npix, npix)
+    expected_area = np.pi * (160 / 2) ** 2
+    assert mask.sum() == pytest.approx(expected_area, rel=0.02)
+    # Toujours aucune mise à l'échelle par pixel : l'ouverture recadrée
+    # doit être pixel-identique à l'original, juste repositionnée.
+    np.testing.assert_array_equal(mask, padded_mask)
+
+
+def test_same_shape_mask_with_margin_feeds_a_correctly_scaled_zernike_basis(tmp_path):
+    """
+    Bout en bout : sans la détection ci-dessus, la base de Zernike
+    supposerait l'ouverture pleine cadre alors qu'elle ne fait que 160 px
+    sur 256 -- un défocus simulé correctement serait alors mal recouvré.
+    Avec la détection, la vérité est recouvrée (voir §12.5).
+    """
+    npix = 256
+    aperture_px = 160
+    padded_mask = _padded_disk(canvas_size=npix, aperture_size=aperture_px)
+    mask_path = _write_tiff(tmp_path, "mask_same_res_padded.tiff", padded_mask)
+
+    mask, n_pup_target = load_and_prepare_mask(
+        psf_shape=(npix, npix), mask_path=mask_path,
+        wavelength=WAVELENGTH, focal_length=FOCAL_LENGTH, pupil_diameter=PUPIL_DIAMETER,
+        pixel_pitch=PIXEL_PITCH,
+    )
+
+    truth_nm = {4: 55.0, 5: 27.5}
+    basis = build_zernike_basis(npix=npix, nterms=12, aperture_px=n_pup_target)
+    rad_to_nm = WAVELENGTH * 1e9 / (2 * np.pi)
+    coeffs = np.zeros(12)
+    coeffs[3], coeffs[4] = truth_nm[4], truth_nm[5]
+    phase_rad = phase_from_coefficients(coeffs / rad_to_nm, basis, mask)
+    psf = psf_from_phase(phase_rad, mask)
+
+    cfg = OpticalConfig(
+        wavelength=WAVELENGTH, zernike_order=12, verbose=False, aperture_px=n_pup_target,
+    )
+    coeffs_nm, diag = fit_zernike_from_psf(psf, mask, cfg)
+
+    assert diag["cost"] < 1e-6
+    assert abs(coeffs_nm[3]) == pytest.approx(55.0, abs=1.0)
+    assert abs(coeffs_nm[4]) == pytest.approx(27.5, abs=1.0)
+
+
+def test_same_shape_mask_with_off_centre_margin_is_detected(tmp_path):
+    """La détection fonctionne aussi pour une ouverture décentrée, même
+    quand le fichier est déjà à la résolution de la PSF."""
+    npix = 256
+    top_left = (40, 70)  # centré serait (48, 48) pour un cadre 256/ouverture 160
+    padded = _off_centre_disk(canvas_size=npix, aperture_size=160, top_left=top_left)
+    mask_path = _write_tiff(tmp_path, "mask_same_res_off_centre.tiff", padded)
+
+    mask, n_pup_target = load_and_prepare_mask(
+        psf_shape=(npix, npix), mask_path=mask_path,
+        wavelength=WAVELENGTH, focal_length=FOCAL_LENGTH, pupil_diameter=PUPIL_DIAMETER,
+        pixel_pitch=PIXEL_PITCH,
+    )
+    assert n_pup_target == 160
+    expected_area = np.pi * (160 / 2) ** 2
+    assert mask.sum() == pytest.approx(expected_area, rel=0.02)
+    # Recentré : le disque doit maintenant être au centre du cadre, pas à
+    # l'emplacement d'origine (40, 70).
+    cy, cx = npix // 2, npix // 2
+    assert mask[cy, cx] == 1.0
+
+
+def test_same_shape_mask_native_aperture_px_honoured(tmp_path):
+    """``native_aperture_px``/``native_aperture_center`` sont pris en
+    compte aussi dans ce cas (même résolution que la PSF), pas seulement
+    quand la résolution diffère."""
+    npix = 256
+    padded_mask = _padded_disk(canvas_size=npix, aperture_size=160)
+    mask_path = _write_tiff(tmp_path, "mask_same_res_padded.tiff", padded_mask)
+
+    mask_auto, n_pup_auto = load_and_prepare_mask(
+        psf_shape=(npix, npix), mask_path=mask_path,
+        wavelength=WAVELENGTH, focal_length=FOCAL_LENGTH, pupil_diameter=PUPIL_DIAMETER,
+        pixel_pitch=PIXEL_PITCH,
+    )
+    mask_explicit, n_pup_explicit = load_and_prepare_mask(
+        psf_shape=(npix, npix), mask_path=mask_path,
+        wavelength=WAVELENGTH, focal_length=FOCAL_LENGTH, pupil_diameter=PUPIL_DIAMETER,
+        pixel_pitch=PIXEL_PITCH, native_aperture_px=160,
+    )
+    assert n_pup_auto == n_pup_explicit == 160
+    np.testing.assert_array_equal(mask_auto, mask_explicit)

@@ -12,8 +12,61 @@ plutôt que de les construire à la main à chaque fois.
 
 from __future__ import annotations
 
+from typing import Optional, Tuple
+
 import numpy as np
 from numpy.typing import NDArray
+
+
+def polar_grid(npix: int, aperture_px: Optional[int] = None) -> Tuple[NDArray[np.float64], NDArray[np.float64]]:
+    """
+    Grille polaire centrée ``(rho, theta)``, ``rho == 1`` au bord d'une
+    ouverture de diamètre ``aperture_px`` à l'intérieur d'un cadre
+    ``npix x npix`` — source commune utilisée à la fois par
+    :class:`PupilGenerator` (pour délimiter un masque) et par
+    :func:`eoqual.phaseretrieval.optics.build_zernike_basis` (pour que la
+    base de Zernike soit évaluée à la **même** échelle que le masque,
+    voir §12.5 de ``REFERENCE_TECHNIQUE.md``) : les deux doivent
+    s'accorder sur où se trouve le bord de la pupille, sous peine de
+    décalage d'échelle silencieux entre le masque et la base modale.
+
+    Parameters
+    ----------
+    npix : int
+        Taille du cadre (pixels).
+    aperture_px : int, optional
+        Diamètre de l'ouverture [px] à l'intérieur du cadre. ``None``
+        (défaut) : l'ouverture remplit le cadre (``aperture_px = npix``,
+        comportement historique, facteur de suréchantillonnage 1).
+
+    Returns
+    -------
+    rho, theta : NDArray, NDArray
+        Rayon normalisé (1 au bord de l'ouverture) et angle [rad], forme
+        ``(npix, npix)``.
+
+    Raises
+    ------
+    ValueError
+        Si ``aperture_px`` dépasse ``npix``, ou est trop petit (< 2) pour
+        définir un rayon non nul.
+    """
+    if aperture_px is None:
+        aperture_px = npix
+    if aperture_px > npix:
+        raise ValueError(f"aperture_px ({aperture_px}) ne peut pas dépasser npix ({npix}).")
+    if aperture_px < 2:
+        raise ValueError(f"aperture_px ({aperture_px}) doit être >= 2.")
+
+    y, x = np.indices((npix, npix)) - npix // 2
+    # Rayon normalisé, volontairement NON clippé à 1.0 : PupilGenerator
+    # teste justement `rho <= 1.0` pour délimiter la pupille (bug corrigé —
+    # un clip ici rendait ce test toujours vrai, produisant un masque
+    # plein-cadre au lieu d'un disque/anneau réel ; voir
+    # tests/test_pupil.py::test_simple_disk_excludes_corners).
+    rho = np.sqrt(x ** 2 + y ** 2) / (aperture_px // 2)
+    theta = np.arctan2(y, x)
+    return rho, theta
 
 
 class PupilGenerator:
@@ -24,18 +77,32 @@ class PupilGenerator:
     ----------
     npix : int
         Taille de la grille (pixels).
+    aperture_px : int, optional
+        Diamètre de l'ouverture [px] à l'intérieur du cadre ``npix x
+        npix`` — contrôle du suréchantillonnage. ``None`` (défaut) :
+        l'ouverture remplit le cadre (comportement historique, facteur de
+        suréchantillonnage 1). Une valeur < ``npix`` centre une ouverture
+        plus petite dans un cadre complété de zéros autour — le même
+        padding que ``io_utils._resample_to_footprint`` applique en
+        chargeant un masque depuis un fichier avec ``oversampling`` > 1
+        (§12.1 de ``REFERENCE_TECHNIQUE.md``), mais ici directement, pour
+        une génération de pupille **en mémoire** (module de simulation,
+        tests, notebooks) sans passer par un fichier. Facteur de
+        suréchantillonnage équivalent : ``npix / aperture_px``.
+
+        **Important** : passer ce même ``aperture_px`` à
+        :func:`eoqual.phaseretrieval.optics.build_zernike_basis` (ou à
+        ``resolve_zernike_basis``) utilisée avec ce masque — sinon la base
+        de Zernike reste évaluée comme si l'ouverture remplissait tout le
+        cadre, un décalage d'échelle silencieux (défocus tronqué,
+        normalisation RMS fausse) décrit et corrigé en §12.5 de
+        ``REFERENCE_TECHNIQUE.md``.
     """
 
-    def __init__(self, npix: int) -> None:
+    def __init__(self, npix: int, aperture_px: Optional[int] = None) -> None:
         self.npix = npix
-        y, x = np.indices((npix, npix)) - npix // 2
-        # Rayon normalisé, volontairement NON clippé à 1.0 : les méthodes
-        # ci-dessous testent justement `rho <= 1.0` pour délimiter la
-        # pupille (bug corrigé — un clip ici rendait ce test toujours vrai,
-        # produisant un masque plein-cadre au lieu d'un disque/anneau réel ;
-        # voir tests/test_pupil.py::test_simple_disk_excludes_corners).
-        self.rho = np.sqrt(x ** 2 + y ** 2) / (npix // 2)
-        self.theta = np.arctan2(y, x)
+        self.aperture_px = npix if aperture_px is None else aperture_px
+        self.rho, self.theta = polar_grid(npix, aperture_px)
 
     def simple_disk(self) -> NDArray[np.float64]:
         """
@@ -98,7 +165,10 @@ class PupilGenerator:
 
         for i in range(n_spiders):
             angle = i * (2 * np.pi / n_spiders)
-            dist_to_line = np.abs(np.sin(self.theta - angle) * self.rho * self.npix / 2)
-            pupil[dist_to_line < (width * self.npix / 2)] = 0.0
+            # self.rho est normalisé à l'ouverture (aperture_px), pas au
+            # cadre (npix) : reconvertir en distance pixel exige
+            # aperture_px, pas npix (identiques quand aperture_px is None).
+            dist_to_line = np.abs(np.sin(self.theta - angle) * self.rho * self.aperture_px / 2)
+            pupil[dist_to_line < (width * self.aperture_px / 2)] = 0.0
 
         return pupil

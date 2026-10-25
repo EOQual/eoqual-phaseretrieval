@@ -277,7 +277,14 @@ def psf_to_wfe(
     N_psf = psf.shape[0]  # On suppose une matrice carrée (N_psf, N_psf)
     psf = psf / np.sum(psf)
 
-    mask, _ = load_and_prepare_mask(
+    # n_pup_target : nombre de pixels que l'ouverture occupe réellement
+    # dans le cadre (N_psf, N_psf) — None si le masque était déjà sur la
+    # grille de la PSF (pas de mise à l'échelle physique, l'ouverture est
+    # alors supposée remplir le cadre). Indispensable à la base de Zernike
+    # (ci-dessous, aperture_px=...) pour rester à la même échelle que le
+    # masque dès que oversampling > 1 introduit une marge — voir §12.5 de
+    # REFERENCE_TECHNIQUE.md.
+    mask, n_pup_target = load_and_prepare_mask(
         psf_shape=(N_psf, N_psf),
         mask_path=mask_path,
         wavelength=wavelength,
@@ -319,6 +326,7 @@ def psf_to_wfe(
 
         zern_cfg = ZernikeConfig(
             order=zernike_order, wavelength=wavelength, orthogonal_basis=orthogonal_basis,
+            aperture_px=n_pup_target,
         )
         coeffs_nm, phase_fit_nm, diagnostics = fit_zernike(phase_rad, mask, zern_cfg)
 
@@ -330,6 +338,7 @@ def psf_to_wfe(
             max_nfev=max_nfev,
             verbose=verbose,
             orthogonal_basis=orthogonal_basis,
+            aperture_px=n_pup_target,
             known_ho_wfe_nm=known_ho_wfe_nm,
             zernike_priors=zernike_priors,
             zernike_bounds=zernike_bounds,
@@ -338,6 +347,7 @@ def psf_to_wfe(
 
         basis = resolve_zernike_basis(
             npix=N_psf, nterms=zernike_order, mask=mask, orthogonalize=orthogonal_basis,
+            aperture_px=n_pup_target,
         )
         phase_fit_nm = phase_from_coefficients(coeffs_nm / rad_to_nm, basis, mask) * rad_to_nm
 
@@ -360,6 +370,7 @@ def psf_to_wfe(
             max_nfev=max_nfev,
             verbose=verbose,
             orthogonal_basis=orthogonal_basis,
+            aperture_px=n_pup_target,
             known_ho_wfe_nm=known_ho_wfe_nm,
             zernike_priors=zernike_priors,
             zernike_bounds=zernike_bounds,
@@ -368,6 +379,7 @@ def psf_to_wfe(
 
         basis = resolve_zernike_basis(
             npix=N_psf, nterms=zernike_order, mask=mask, orthogonalize=orthogonal_basis,
+            aperture_px=n_pup_target,
         )
         phase_fit_nm = phase_from_coefficients(coeffs_nm / rad_to_nm, basis, mask) * rad_to_nm
 

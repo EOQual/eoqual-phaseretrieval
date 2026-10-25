@@ -405,7 +405,7 @@ des trois méthodes ne fait partie de ce dépôt.
 
 ```
 src/eoqual/phaseretrieval/
-    io_utils.py                    # chargement image/masque, diagnostics Plotly
+    io_utils.py                    # chargement image/masque, enveloppes Plotly spécifiques
     optics.py                      # base de Zernike, modèle direct phase -> PSF
     zernike_fit.py                 # décomposition d'une carte de phase (Noll)
     pipeline.py                    # psf_to_wfe(method=...) + CLI unifiée
@@ -437,6 +437,24 @@ itération du solveur ; `backends/gerchberg_saxton.py` n'en a pas besoin
 `zernike_fit.py` *après coup* pour produire des coefficients comparables
 aux deux autres
 méthodes.
+
+**Fonctions graphiques génériques (heatmap 2D, comparaison de
+courbes/coupes avec repères verticaux) externalisées dans
+[`eoqual-viz`](https://github.com/EOQual/eoqual-viz)** — elles n'avaient
+rien de spécifique à la récupération de phase (ex-`io_utils.plot_array_plotly`,
+ex-`io_utils.plot_mtf_cuts`). `io_utils.py` ne garde que les enveloppes
+spécifiques à ce projet (`plot_mtf_cuts`, assemblage des coupes FTM +
+fréquence de coupure avant de passer les tableaux à
+`eoqual.viz.plot_curve_grid`) et `diagnostics.py` les fonctions
+purement numériques (`mtf_frequency_axis`, `mtf_cutoff_frequency`,
+`mtf_cuts`, `mtf_value_at`, `mtf_integral`, §9.5) — ces dernières sont
+restées ici plutôt que dans `eoqual-core` : sa propre règle de
+gouvernance n'y admet une brique que si **au moins deux modules**
+l'utilisent (voir `eoqual-core/README.md` §Règles), ce qui n'est pas
+encore le cas. `encircled_energy` et `fwhm` (§9.5), à l'inverse,
+délèguent bien à `eoqual-core` (`psf.encircled_energy`, `edge.fwhm`) :
+ces fonctions-là y existaient déjà, utilisées par d'autres modules —
+aucune nouvelle brique à y faire accepter.
 
 ### 6.2 Point d'entrée unifié
 
@@ -980,6 +998,65 @@ combinent ces éléments en un diagnostic qualitatif rapide (« défocus
 dominant », « coma/astigmatisme dominant », …) — **heuristique**, à
 confirmer systématiquement par un vrai fit Zernike avant toute conclusion.
 
+### 9.5 FTM : coupes H/V, axe de fréquence réduite, fréquence de coupure
+
+Plusieurs fonctions complètent `compute_mtf` pour une lecture physique de
+la FTM plutôt qu'un simple tableau 2D. **Convention d'axe : fraction de
+la fréquence d'échantillonnage `fe` du détecteur, pas de Nyquist `fe/2`**
+— `fe/2` vaut donc `0,5` dans cette unité, pas `1,0` (choisi pour que
+l'axe des fréquences coïncide avec la convention `np.fft.fftfreq`, sans
+reconversion mentale).
+
+- `mtf_frequency_axis(npix)` : axe de fréquence réduite (fraction de
+  `fe`) — `0` au centre, `±0,5` exactement au bord du tableau (par
+  construction du modèle PSF = `|FFT(pupille)|²`, le bord correspond
+  toujours à `fe/2`, quelle que soit l'ouverture — mais ``0,5`` dans
+  cette unité, pas ``1,0``).
+- `mtf_cutoff_frequency(npix, aperture_px=None)` : fréquence de coupure
+  optique `fc` (diffraction), dans la même unité — `fc = aperture_px /
+  npix` (voir §12.5 pour `aperture_px`). Avec `aperture_px=None`
+  (ouverture pleine cadre) : `fc = 1,0`, *hors* de l'intervalle `[0, 0,5]`
+  représentable par une FFT — ce modèle brut, sans marge de
+  suréchantillonnage, échantillonne en-deçà du critère de Nyquist pour
+  la diffraction (`Q = 1`). Avec `aperture_px = npix/2` (voir
+  §12.1/§12.5) : `fc = 0,5`, l'échantillonnage de Nyquist exact
+  (`Q = 2`) — `fc` coïncide alors pile avec `fe/2`.
+- `mtf_cuts(mtf)` : coupes horizontale et verticale (lignes/colonnes
+  centrales), même convention de centrage que les deux fonctions
+  ci-dessus. Fonctionne sur n'importe quel tableau 2D (pas spécifique à
+  une FTM) — s'applique tout aussi bien à une coupe de PSF.
+- `mtf_value_at(freq, cut, frequency)` : valeur interpolée (linéaire) de
+  la FTM à une fréquence réduite donnée — ex. `mtf_value_at(freq, cut,
+  0.25)` pour la valeur à `fe/4`.
+- `mtf_integral(freq, cut, f_max=0.5)` : intégrale (trapèzes) de la FTM
+  entre `0` et `f_max` — résume "combien de contraste la FTM conserve en
+  moyenne" sur une bande (`[0, fe/2]` par défaut, tout le domaine
+  représentable par le détecteur).
+
+`io_utils.plot_mtf_cuts(mtf_estimated, *, mtf_reference=None, fc=None,
+title=...)` assemble les trois premières en une figure Plotly (deux
+sous-graphes, fréquences positives seulement — `MTF(-f) == MTF(f)` pour
+une PSF réelle) : la référence, quand fournie, se superpose à l'estimée ;
+deux repères verticaux toujours tracés — `fe/2` en **bleu** (fixe, à
+`0,5`), et `fc` en **rouge** si fourni. Démontré dans
+`examples/psf2zernike_demo.ipynb`, avec le tableau `mtf_value_at`/
+`mtf_integral` à l'appui (sections « Suréchantillonnage en mémoire » —
+cas `fc = 0,5`, confondu avec `fe/2` — et « lire une PSF et la décomposer »
+— cas `fc = 1,0`, bien au-delà). La mécanique Plotly elle-même
+(`eoqual.viz.plot_curve_grid`) est générique — voir la note du §6.1.
+
+**Métriques PSF complémentaires** (Strehl, FWHM, énergie encerclée),
+toutes deux simulée/vérité et récupérée/restituée, pour comparaison
+directe — `diagnostics.encircled_energy` (délègue à
+`eoqual.core.psf.encircled_energy`) et `diagnostics.fwhm` (délègue à
+`eoqual.core.edge.fwhm`, conçue pour une LSF mais purement générique :
+s'applique directement à une coupe de PSF, comme `mtf_cuts` pour la FTM).
+`strehl_ratio` existait déjà (§9.1) ; seule différence ici, calculé à la
+fois sur la PSF simulée et sur la PSF récupérée, contre la même référence
+diffraction-limitée (même masque, phase nulle). Démontré dans les trois
+exemples de `examples/psf2zernike_demo.ipynb` (section « Fonctionnalités
+avancées »).
+
 ---
 
 ## 10. Pupilles réelles : au-delà du disque plein
@@ -1391,11 +1468,55 @@ ho_native_aperture_center=, aperture_threshold=)` / `--pixel_pitch`/
 `--oversampling`/`--mask_no_binarize`/`--mask_native_aperture_px`/
 `--ho_native_aperture_px`/`--mask_native_aperture_center`/
 `--ho_native_aperture_center`/`--aperture_threshold` en CLI.
-`eoqual.phaseretrieval.simulation` reste, à ce stade, à résolution unique
-(masque construit directement sur `npix` via `PupilGenerator`) — simuler
-un cas de test avec masque/PSF à des résolutions natives différentes (ou
-avec une marge de zéros) reste à faire manuellement (voir
+`eoqual.phaseretrieval.simulation` accepte désormais `aperture_px` (§12.5)
+pour le suréchantillonnage **en mémoire** — simuler un cas de test avec
+masque/PSF à des résolutions **natives** réellement différentes (fichiers
+séparés) reste, lui, à construire manuellement (voir
 `tests/test_multi_resolution.py` pour le patron).
+
+### 12.5 La base de Zernike doit partager le même `aperture_px` que le masque
+
+**Pourquoi.** `optics.build_zernike_basis`/`zernike_basis_orthogonal.resolve_zernike_basis`
+évaluent par défaut chaque mode en supposant que l'ouverture remplit tout
+le cadre `npix` (convention par défaut de `poppy.zernike.zernike_basis`
+sans `rho`/`theta` personnalisé). Or le principe même de §12.1
+(`oversampling` > 1) est de zero-padder l'ouverture *dans* un cadre plus
+grand : elle n'occupe alors que `N_pup_target < npix` pixels. La base doit
+être évaluée avec ce même rayon, pas avec `npix`, sous peine d'un
+décalage d'échelle entre masque et base.
+
+**Ce qui ne va pas sans ça.** À l'intérieur de la *vraie* ouverture, un
+mode comme $Z_4$ (défocus) ne parcourt plus qu'une fraction tronquée de
+sa dynamique propre (p. ex. $-1,73$ à $-0,84$ au lieu de $-1,73$ à
+$+1,73$), et sa RMS sur l'ouverture n'est plus $1$ comme l'exige la
+normalisation de Noll (p. ex. $1,32$) : un défocus simulé n'a plus la
+forme physique d'un vrai défocus, et un coefficient récupéré n'a pas
+l'échelle qu'il prétend avoir.
+
+**Le mécanisme.** Un paramètre `aperture_px` (diamètre \[px\] de
+l'ouverture dans le cadre `npix x npix`), partagé de bout en bout via
+`pupil.polar_grid(npix, aperture_px)` — la même grille `(rho, theta)`
+(`rho == 1` au bord de l'**ouverture**, pas du cadre) utilisée à la fois
+par `PupilGenerator(npix, aperture_px=...)` (délimiter le masque) et par
+`optics.build_zernike_basis(npix, nterms, aperture_px=...)` (évaluer la
+base à la même échelle, via le `rho`/`theta` personnalisé que
+`poppy.zernike.zernike_basis` accepte nativement). Propagé à travers
+`zernike_basis_orthogonal.ZernikeGramSchmidt`/`resolve_zernike_basis`,
+`zernike_fit.ZernikeConfig`/`fit_zernike`/`project_orthogonal_to_standard`,
+`backends.optimization.OpticalConfig`,
+`backends.phase_diversity.PhaseDiversityConfig`, et `pipeline.psf_to_wfe`
+(qui transmet le `N_pup_target` qu'il calcule déjà — `None` si le masque
+est déjà sur la grille de la PSF, le cas le plus courant ; aucun
+changement d'API publique). `PupilGenerator`/`simulate_psf_from_zernike`/
+`PhaseDiversitySimulationConfig` acceptent aussi `aperture_px` directement,
+pour suréchantillonner **en mémoire** (sans fichier) de façon cohérente
+masque+base — voir §6.7 et `examples/psf2zernike_demo.ipynb`.
+`aperture_px=None` (par défaut partout) reproduit le comportement sans
+marge (ouverture remplissant le cadre) ; vérifié par régression
+(`tests/test_optics_and_pupil.py::test_build_zernike_basis_aperture_px_none_matches_historical_default`).
+
+Historique du correctif (bug initial, pourquoi non détecté, tests
+réparés) : voir `CHANGELOG.md`.
 
 ---
 

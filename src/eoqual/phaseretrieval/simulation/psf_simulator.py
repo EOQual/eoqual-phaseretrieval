@@ -79,6 +79,7 @@ def simulate_psf_from_zernike(
     npix: int = 256,
     zernike_order: int = 15,
     mask: Optional[NDArray[np.float64]] = None,
+    aperture_px: Optional[int] = None,
     noise: Optional[DetectorNoiseConfig] = None,
     orthogonal_basis: bool = False,
     known_ho_wfe_nm: Optional[NDArray[np.float64]] = None,
@@ -105,7 +106,22 @@ def simulate_psf_from_zernike(
         Nombre de modes de Zernike (ordre de Noll) de la base utilisée.
     mask : NDArray, optional
         Masque pupillaire binaire ``(npix, npix)``. Par défaut, un disque
-        plein non obstrué (:class:`eoqual.phaseretrieval.pupil.PupilGenerator`).
+        plein non obstrué (:class:`eoqual.phaseretrieval.pupil.PupilGenerator`),
+        dont l'ouverture remplit le cadre à moins que ``aperture_px`` ne
+        soit fourni.
+    aperture_px : int, optional
+        Diamètre [px] de l'ouverture à l'intérieur du cadre ``npix x
+        npix`` — contrôle du suréchantillonnage, en mémoire, sans fichier
+        (voir :class:`eoqual.phaseretrieval.pupil.PupilGenerator` et §12.5
+        de ``REFERENCE_TECHNIQUE.md``). N'a d'effet que si ``mask is
+        None`` (sinon c'est le masque fourni qui détermine l'ouverture
+        réelle — fournir ``aperture_px`` alors pour qu'il corresponde à ce
+        masque personnalisé). ``None`` (défaut) : l'ouverture remplit le
+        cadre (facteur de suréchantillonnage 1, comportement historique).
+        Appliqué de façon cohérente à la fois au masque généré et à la
+        base de Zernike utilisée pour simuler la phase — sans quoi la PSF
+        simulée ne correspondrait à aucune aberration physique réelle
+        (défocus tronqué, normalisation RMS fausse).
     noise : DetectorNoiseConfig, optional
         Si fourni, un bruit détecteur réaliste (Poisson + lecture) est
         appliqué (voir :mod:`.noise`). Par défaut ``None`` : seule la PSF
@@ -153,6 +169,7 @@ def simulate_psf_from_zernike(
           renvoyée séparément.
         - ``"wavelength"`` : longueur d'onde utilisée [m].
         - ``"orthogonal_basis"`` : rappel du réglage utilisé.
+        - ``"aperture_px"`` : rappel du réglage utilisé (ou ``None``).
         - ``"known_ho_wfe_nm"`` : rappel de la carte HO utilisée (ou ``None``).
 
     Raises
@@ -165,13 +182,14 @@ def simulate_psf_from_zernike(
         :func:`eoqual.phaseretrieval.optics.wfe_map_to_phase`.
     """
     if mask is None:
-        mask = PupilGenerator(npix).simple_disk()
+        mask = PupilGenerator(npix, aperture_px=aperture_px).simple_disk()
 
     coeffs_arr_nm = coeffs_to_array(coeffs_nm, zernike_order)
     rad_to_nm = wavelength * 1e9 / (2.0 * np.pi)
 
     basis = resolve_zernike_basis(
         npix=npix, nterms=zernike_order, mask=mask, orthogonalize=orthogonal_basis,
+        aperture_px=aperture_px,
     )
     phase_rad = phase_from_coefficients(coeffs_arr_nm / rad_to_nm, basis, mask)
     if known_ho_wfe_nm is not None:
@@ -187,5 +205,6 @@ def simulate_psf_from_zernike(
         "coeffs_nm": coeffs_arr_nm,
         "wavelength": wavelength,
         "orthogonal_basis": orthogonal_basis,
+        "aperture_px": aperture_px,
         "known_ho_wfe_nm": known_ho_wfe_nm,
     }

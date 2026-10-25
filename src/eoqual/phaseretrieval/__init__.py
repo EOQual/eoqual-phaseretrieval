@@ -27,7 +27,7 @@ Voir ``README.md`` pour l'installation et le catalogue, et
 de chaque méthode.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __title__ = "eoqual.phaseretrieval"
 __description__ = "PSF -> WFE -> Zernike coefficients, by phase retrieval and phase diversity"
 __url__ = "https://github.com/EOQual/eoqual-phaseretrieval"
@@ -54,7 +54,7 @@ from .zernike_fit import (  # noqa: F401
 )
 from .zernike_basis_orthogonal import ZernikeGramSchmidt, resolve_zernike_basis  # noqa: F401
 from .zernike_priors import build_prior_bounds, build_prior_penalty, feasible_start  # noqa: F401
-from .pupil import PupilGenerator  # noqa: F401
+from .pupil import PupilGenerator, polar_grid  # noqa: F401
 from .diagnostics import (  # noqa: F401
     PSFMetrics,
     airy_psf,
@@ -62,10 +62,18 @@ from .diagnostics import (  # noqa: F401
     compute_mtf,
     core_ellipticity,
     diagnose_aberration,
+    encircled_energy,
+    fwhm,
+    mtf_cutoff_frequency,
+    mtf_cuts,
+    mtf_frequency_axis,
+    mtf_integral,
+    mtf_value_at,
+    radial_profile,
     strehl_ratio,
     wfe_rms_from_strehl,
 )
-from .io_utils import load_and_prepare_mask, load_image  # noqa: F401
+from .io_utils import load_and_prepare_mask, load_image, plot_mtf_cuts  # noqa: F401
 
 from .backends.gerchberg_saxton import RetrievalConfig, gerchberg_saxton  # noqa: F401
 from .backends.optimization import OpticalConfig, fit_zernike_from_psf  # noqa: F401
@@ -90,16 +98,26 @@ __all__ = [
     "build_prior_bounds",
     "feasible_start",
     "PupilGenerator",
+    "polar_grid",
     "PSFMetrics",
     "airy_psf",
     "compute_metrics",
     "compute_mtf",
     "core_ellipticity",
     "diagnose_aberration",
+    "encircled_energy",
+    "fwhm",
+    "mtf_cutoff_frequency",
+    "mtf_cuts",
+    "mtf_frequency_axis",
+    "mtf_integral",
+    "mtf_value_at",
+    "radial_profile",
     "strehl_ratio",
     "wfe_rms_from_strehl",
     "load_and_prepare_mask",
     "load_image",
+    "plot_mtf_cuts",
     "RetrievalConfig",
     "gerchberg_saxton",
     "OpticalConfig",

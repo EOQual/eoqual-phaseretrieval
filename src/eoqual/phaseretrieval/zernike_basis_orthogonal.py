@@ -30,7 +30,7 @@ Références
 
 from __future__ import annotations
 
-from typing import Dict
+from typing import Dict, Optional
 
 import numpy as np
 from numpy.typing import NDArray
@@ -49,6 +49,16 @@ class ZernikeGramSchmidt:
         ``(npix, npix)``.
     j_max : int, default 21
         Indice de Noll maximum à orthogonaliser.
+    aperture_px : int, optional
+        Diamètre [px] de l'ouverture dans ``pupil_mask`` — voir
+        ``optics.build_zernike_basis``. ``None`` (défaut) : l'ouverture
+        remplit tout le cadre (comportement historique). À renseigner
+        quand ``pupil_mask`` vient d'une ouverture plus petite que son
+        cadre (``pupil.PupilGenerator(npix, aperture_px=...)``,
+        suréchantillonnage — §12.5 de ``REFERENCE_TECHNIQUE.md``) : sinon
+        la base brute de Noll utilisée comme point de départ de la
+        ré-orthogonalisation est déjà mal échelonnée par rapport à
+        l'ouverture réelle, avant même la projection Gram-Schmidt.
 
     Attributes
     ----------
@@ -76,14 +86,22 @@ class ZernikeGramSchmidt:
     l'orthogonalité exacte sur un masque arbitraire.
     """
 
-    def __init__(self, pupil_mask: NDArray[np.float64], j_max: int = 21) -> None:
+    def __init__(
+        self,
+        pupil_mask: NDArray[np.float64],
+        j_max: int = 21,
+        *,
+        aperture_px: Optional[int] = None,
+    ) -> None:
         self.pupil_mask = pupil_mask
         self.j_max = j_max
         self._pupil_area = float(np.sum(pupil_mask))
         if self._pupil_area <= 0:
             raise ValueError("Pupil mask must contain at least one non-zero pixel.")
 
-        self._raw_basis = build_zernike_basis(npix=pupil_mask.shape[0], nterms=j_max)
+        self._raw_basis = build_zernike_basis(
+            npix=pupil_mask.shape[0], nterms=j_max, aperture_px=aperture_px,
+        )
 
         self.orthonormal_modes: Dict[int, NDArray[np.float64]] = {}
         self._orthogonalize()
@@ -209,6 +227,7 @@ def resolve_zernike_basis(
     mask: NDArray[np.float64],
     *,
     orthogonalize: bool = False,
+    aperture_px: Optional[int] = None,
 ) -> NDArray[np.float64]:
     """
     Point d'entrée commun pour choisir la base de Zernike utilisée par les
@@ -231,6 +250,11 @@ def resolve_zernike_basis(
         recommandé dès que la pupille n'est pas un disque plein
         (obstruction centrale, bras d'araignée), cas le plus courant en
         télédétection (§8.1).
+    aperture_px : int, optional
+        Diamètre [px] de l'ouverture dans ``mask``, si elle ne remplit pas
+        tout le cadre ``npix x npix`` — voir ``optics.build_zernike_basis``
+        et §12.5 de ``REFERENCE_TECHNIQUE.md``. ``None`` (défaut) :
+        l'ouverture remplit le cadre (comportement historique).
 
     Returns
     -------
@@ -253,9 +277,9 @@ def resolve_zernike_basis(
         renvoyer des coefficients dont l'indexation a glissé.
     """
     if not orthogonalize:
-        return build_zernike_basis(npix=npix, nterms=nterms)
+        return build_zernike_basis(npix=npix, nterms=nterms, aperture_px=aperture_px)
 
-    gram_schmidt = ZernikeGramSchmidt(mask, j_max=nterms)
+    gram_schmidt = ZernikeGramSchmidt(mask, j_max=nterms, aperture_px=aperture_px)
     available = sorted(gram_schmidt.orthonormal_modes)
     if available != list(range(1, nterms + 1)):
         missing = sorted(set(range(1, nterms + 1)) - set(available))

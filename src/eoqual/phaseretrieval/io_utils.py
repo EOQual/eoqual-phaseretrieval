@@ -6,7 +6,10 @@ E/S et visualisation communes à toutes les méthodes de reconstruction.
 Ce module regroupe les fonctions indépendantes de l'algorithme de
 récupération de phase choisie (Gerchberg-Saxton, optimisation directe ou
 diversité de phase) : chargement d'images, préparation du masque
-pupillaire et diagnostics graphiques Plotly.
+pupillaire et diagnostics graphiques Plotly. La mécanique Plotly
+générique (heatmap 2D, comparaison de courbes) vit dans ``eoqual-viz`` ;
+ce module n'en garde que les enveloppes spécifiques à ce projet
+(``plot_mtf_cuts``, ``visualisation_diagnostics``).
 """
 
 from __future__ import annotations
@@ -16,6 +19,7 @@ from typing import Optional, Tuple, Union
 
 import numpy as np
 import plotly.graph_objects as go
+from eoqual.viz import plot_array
 from loguru import logger
 from numpy.typing import NDArray
 from skimage.transform import resize
@@ -352,13 +356,18 @@ def load_and_prepare_mask(
     of the same size as the PSF.
 
     If the raw mask image is *already* the same shape as the PSF, it is
-    assumed to be pre-registered on the working grid (e.g. produced by a
-    simulator, or already at the correct oversampled resolution) and is
-    used as-is, skipping the physical resize step — this is the normal
-    (and only tested) path for masks built alongside their PSF on the same
-    grid; see §12 of ``REFERENCE_TECHNIQUE.md`` for the multi-resolution
-    case (mask/PSF/HO-map each at their own native resolution) this
-    function is designed for otherwise.
+    assumed to be at the same **resolution** (e.g. produced by a
+    simulator, or already at the correct oversampled resolution) — no
+    physical rescale is applied, this is the normal (and only tested) path
+    for masks built alongside their PSF on the same grid. It is *not*,
+    however, assumed to already be tightly cropped on its aperture: a zero
+    (or near-zero) margin is still auto-detected and stripped/re-centred
+    exactly as in the differing-resolution case below (``native_aperture_px``/
+    ``aperture_threshold`` apply here too) — same array size as the PSF
+    means same resolution, not necessarily "aperture already fills the
+    frame". See §12 of ``REFERENCE_TECHNIQUE.md`` for the general
+    multi-resolution case (mask/PSF/HO-map each at their own native
+    resolution) this function is designed for otherwise.
 
     Parameters
     ----------
@@ -410,9 +419,12 @@ def load_and_prepare_mask(
         Mask centred in the field of view, values in ``{0, 1}`` if
         ``binarize=True`` (default) or ``[0, 1]`` otherwise.
     N_pup_target : int or None
-        Number of pixels the pupil spans after the geometric scaling, or
-        ``None`` when the mask was already on the working grid (no scaling
-        was applied).
+        Number of pixels the aperture actually spans within ``mask`` —
+        either after the physical rescale, or after cropping/re-centring a
+        margin found despite the mask already being on the working grid.
+        ``None`` only when the mask was already on the working grid *and*
+        its aperture already fills the whole frame (no margin, nothing to
+        correct) — the historical, still most common case.
 
     Raises
     ------
@@ -428,18 +440,53 @@ def load_and_prepare_mask(
     mask_raw = load_image(mask_path)
 
     # Le masque simulé/pré-enregistré est déjà sur la grille de travail :
-    # aucune mise à l'échelle physique n'est nécessaire.
+    # aucune mise à l'échelle physique n'est nécessaire. Reste à vérifier
+    # qu'il n'a pas, lui non plus, une marge de zéros autour de l'ouverture
+    # (même taille de tableau que la PSF n'implique pas que l'ouverture en
+    # remplit tout le cadre — §12.3 s'applique aussi ici, pas seulement
+    # quand la résolution native diffère).
     if mask_raw.shape == psf_shape:
-        mask = (mask_raw > 0.5).astype(np.float64) if binarize else mask_raw.astype(np.float64)
-        logger.warning(
-            f"Masque déjà sur la grille de la PSF ({mask_raw.shape[0]}x{mask_raw.shape[1]}) : "
-            "mise à l'échelle physique ignorée — vérifier que c'est bien voulu "
-            "si le masque vient d'un autre outil (voir REFERENCE_TECHNIQUE.md §12)."
+        mask_aperture = _crop_to_aperture(
+            mask_raw, native_aperture_px=native_aperture_px,
+            aperture_threshold=aperture_threshold, native_aperture_center=native_aperture_center,
         )
-        return mask, None
+        if mask_aperture.shape == mask_raw.shape:
+            # Aucune marge détectée : l'ouverture remplit déjà le cadre —
+            # comportement historique inchangé.
+            mask = (mask_raw > 0.5).astype(np.float64) if binarize else mask_raw.astype(np.float64)
+            logger.warning(
+                f"Masque déjà sur la grille de la PSF : ouverture supposée pleine cadre "
+                f"({mask_raw.shape[0]}x{mask_raw.shape[1]} px) — mise à l'échelle physique "
+                "ignorée, vérifier que c'est bien voulu si le masque vient d'un autre outil "
+                "(voir REFERENCE_TECHNIQUE.md §12)."
+            )
+            return mask, None
+
+        # Marge détectée malgré une taille de tableau déjà égale à celle de
+        # la PSF : recadrer/recentrer l'ouverture (aucun changement de
+        # résolution par pixel nécessaire, donc pas d'interpolation —
+        # _resample_to_footprint le constate lui-même et se contente d'un
+        # padding centré), pour que la base de Zernike connaisse la vraie
+        # taille de l'ouverture (aperture_px) au lieu de supposer qu'elle
+        # remplit tout le cadre (§12.5).
+        n_pup_target = mask_aperture.shape[0]
+        mask = _resample_to_footprint(mask_aperture, N_psf, n_pup_target, order=1, anti_aliasing=True)
+        if binarize:
+            mask = (mask > 0.5).astype(np.float64)
+        logger.warning(
+            f"Masque sur la grille de la PSF ({mask_raw.shape[0]}x{mask_raw.shape[1]}) mais "
+            f"ouverture détectée plus petite que le cadre ({n_pup_target}x{n_pup_target} px) : "
+            "recadrée/recentrée sans changement de résolution (voir "
+            "REFERENCE_TECHNIQUE.md §12.3/§12.5)."
+        )
+        return mask, n_pup_target
 
     n_pup_target = compute_pupil_footprint_px(
         N_psf, wavelength, focal_length, pupil_diameter, pixel_pitch, oversampling,
+    )
+    logger.info(
+        f"Ouverture estimée à {n_pup_target}x{n_pup_target} px sur la grille de la PSF "
+        f"({N_psf}x{N_psf}) — masque natif {mask_raw.shape[0]}x{mask_raw.shape[1]} px."
     )
 
     # Marge éventuelle (zéros autour de l'ouverture) retirée avant la mise
@@ -540,14 +587,18 @@ def load_and_prepare_ho_wfe(
 
     if ho_wfe_raw.shape == psf_shape:
         logger.warning(
-            f"Carte HO déjà sur la grille de la PSF ({ho_wfe_raw.shape[0]}x{ho_wfe_raw.shape[1]}) : "
-            "mise à l'échelle physique ignorée — vérifier que c'est bien voulu "
-            "(voir REFERENCE_TECHNIQUE.md §12)."
+            f"Carte HO déjà sur la grille de la PSF : ouverture supposée pleine cadre "
+            f"({ho_wfe_raw.shape[0]}x{ho_wfe_raw.shape[1]} px) — mise à l'échelle physique "
+            "ignorée, vérifier que c'est bien voulu (voir REFERENCE_TECHNIQUE.md §12)."
         )
         return ho_wfe_raw.astype(np.float64)
 
     n_pup_target = compute_pupil_footprint_px(
         N_psf, wavelength, focal_length, pupil_diameter, pixel_pitch, oversampling,
+    )
+    logger.info(
+        f"Carte HO : ouverture estimée à {n_pup_target}x{n_pup_target} px sur la grille de "
+        f"la PSF ({N_psf}x{N_psf}) — fichier natif {ho_wfe_raw.shape[0]}x{ho_wfe_raw.shape[1]} px."
     )
     ho_wfe_aperture = _crop_to_aperture(
         ho_wfe_raw, native_aperture_px=native_aperture_px, aperture_threshold=aperture_threshold,
@@ -556,72 +607,90 @@ def load_and_prepare_ho_wfe(
     return _resample_to_footprint(ho_wfe_aperture, N_psf, n_pup_target, order=3, anti_aliasing=True)
 
 
-def plot_array_plotly(
-    arr: np.ndarray,
+def plot_mtf_cuts(
+    mtf_estimated: NDArray[np.float64],
     *,
-    title: str = "",
-    cmap: str = "viridis",
-    log: bool = False,
-    vmin: Optional[float] = None,
-    vmax: Optional[float] = None,
-    cbar_label: str = "",
+    mtf_reference: Optional[NDArray[np.float64]] = None,
+    fc: Optional[float] = None,
+    title: str = "FTM — coupes H/V",
 ) -> go.Figure:
     """
-    Visualisation interactive d'un tableau 2-D avec Plotly.
+    Compare les coupes horizontale et verticale d'une FTM estimée (et,
+    si disponible, d'une FTM de référence), avec un axe de fréquence en
+    fraction de ``fe`` (fréquence d'échantillonnage du détecteur — pas
+    ``fe/2`` : voir :func:`diagnostics.mtf_frequency_axis`). Repères
+    verticaux : ``fe/2`` (Nyquist, toujours à ``0,5`` dans cette
+    convention) en bleu, ``fc`` (fréquence de coupure optique, si
+    fournie) en rouge — voir :mod:`diagnostics` (``compute_mtf``,
+    ``mtf_frequency_axis``, ``mtf_cuts``, ``mtf_cutoff_frequency``).
+
+    Fine enveloppe spécifique FTM (extraction des coupes, étiquettes,
+    fréquence de coupure) au-dessus de
+    :func:`eoqual.viz.plot_curve_grid`, qui porte la mécanique Plotly
+    générique (voir ``eoqual-viz``, extrait de ce module).
+
+    Seules les fréquences positives sont tracées (convention usuelle pour
+    une FTM — ``MTF(-f) == MTF(f)`` pour une PSF réelle, §9 de
+    ``REFERENCE_TECHNIQUE.md``).
 
     Parameters
     ----------
-    arr : np.ndarray
-        Tableau à afficher (2-D).
-    title : str, optional
-        Titre du graphique.
-    cmap : str, default "viridis"
-        Nom du colormap Plotly (voir https://plotly.com/python/builtin-colorscales/).
-    log : bool, default False
-        Si ``True`` on trace ``log10(arr)`` – pratique pour les PSF.
-    vmin, vmax : float, optional
-        Limites de l'échelle de couleur.
-    cbar_label : str, optional
-        Légende de la barre de couleur.
+    mtf_estimated : NDArray
+        FTM 2D estimée (ex. depuis une PSF reconstruite à partir des
+        coefficients de Zernike récupérés) — voir
+        :func:`diagnostics.compute_mtf`.
+    mtf_reference : NDArray, optional
+        FTM 2D de référence (ex. depuis une PSF connue/simulée), même
+        forme que ``mtf_estimated``. ``None`` (défaut) : seule l'estimée
+        est tracée (pas de vérité terrain disponible).
+    fc : float, optional
+        Fréquence de coupure optique, en fraction de ``fe`` — voir
+        :func:`diagnostics.mtf_cutoff_frequency`. Tracée en repère
+        vertical rouge sur les deux coupes si fournie. ``None`` (défaut) :
+        paramètres physiques non disponibles, pas de repère tracé.
+    title : str
+        Titre de la figure.
 
     Returns
     -------
     go.Figure
-        Figure Plotly prête à être affichée avec ``fig.show()``.
+        Deux sous-graphes (coupe horizontale, coupe verticale), prêts
+        pour ``.show()``.
     """
-    data = np.log10(arr + 1e-12) if log else arr
+    from eoqual.viz import plot_curve_grid
 
-    fig = go.Figure(
-        data=go.Heatmap(
-            z=data,
-            colorscale=cmap,
-            zmin=vmin,
-            zmax=vmax,
-            colorbar=dict(title=cbar_label) if cbar_label else None,
-            showscale=True,
-        )
-    )
-    fig.update_layout(
-        title=dict(text=title, x=0.5, xanchor="center"),
-        xaxis=dict(
-            showgrid=False,
-            zeroline=False,
-            showticklabels=False,
-            constrain="domain",
-        ),
-        yaxis=dict(
-            showgrid=False,
-            zeroline=False,
-            showticklabels=False,
-            scaleanchor="x",
-            scaleratio=1,
-        ),
-        width=500,
-        height=500,
-        margin=dict(l=0, r=0, t=30, b=0),
-    )
+    from .diagnostics import mtf_cuts, mtf_frequency_axis
 
-    return fig
+    npix = mtf_estimated.shape[0]
+    freq = mtf_frequency_axis(npix)
+    positive = freq >= 0  # FTM symétrique : ne tracer que f >= 0 (convention usuelle)
+
+    cut_h_est, cut_v_est = mtf_cuts(mtf_estimated)
+
+    references = None
+    if mtf_reference is not None:
+        cut_h_ref, cut_v_ref = mtf_cuts(mtf_reference)
+        references = [cut_h_ref[positive], cut_v_ref[positive]]
+
+    nyquist = 0.5  # fe/2, toujours à cette position dans la convention "fraction de fe"
+    x_max = 1.05 * nyquist if fc is None else max(1.05 * nyquist, 1.05 * fc)
+    vlines = [(nyquist, "fe/2", "blue")]
+    if fc is not None:
+        vlines.append((fc, "fc", "red"))
+
+    return plot_curve_grid(
+        freq[positive],
+        [("Coupe horizontale", cut_h_est[positive]), ("Coupe verticale", cut_v_est[positive])],
+        references=references,
+        vlines=vlines,
+        xlabel="Fréquence réduite (fraction de fe)",
+        ylabel="FTM",
+        title=title,
+        x_range=(0, x_max),
+        y_range=(0, 1.05),
+        width=900,
+        height=380,
+    )
 
 
 def visualisation_diagnostics(
@@ -660,11 +729,11 @@ def visualisation_diagnostics(
     log_psf_meas = np.log10(psf + 1e-12)
     vmin_psf, vmax_psf = log_psf_meas.min(), log_psf_meas.max()
 
-    plot_array_plotly(
+    plot_array(
         psf, title="Measured PSF (log)", log=True, vmin=vmin_psf, vmax=vmax_psf,
     ).show()
 
-    plot_array_plotly(mask, title="Binary pupil mask").show()
+    plot_array(mask, title="Binary pupil mask").show()
 
     # ------------------------------------------------------------------
     # 2. Cartes de phase (en nm) – échelle symétrique
@@ -673,12 +742,12 @@ def visualisation_diagnostics(
     dyn_phase_nm = max(abs(ref_for_scale.min()), abs(ref_for_scale.max()))
 
     if phase_nm is not None:
-        plot_array_plotly(
+        plot_array(
             phase_nm, title="Retrieved phase (nm)", cmap="RdBu",
             vmin=-dyn_phase_nm, vmax=+dyn_phase_nm, cbar_label="WFE (nm)",
         ).show()
 
-    plot_array_plotly(
+    plot_array(
         phase_fit_nm, title="Zernike-reconstructed phase (nm)", cmap="RdBu",
         vmin=-dyn_phase_nm, vmax=+dyn_phase_nm, cbar_label="WFE (nm)",
     ).show()
@@ -694,7 +763,7 @@ def visualisation_diagnostics(
     ) ** 2
     psf_pred /= np.sum(psf_pred)
 
-    plot_array_plotly(
+    plot_array(
         psf_pred, title="Predicted PSF from Zernike fit (log)", log=True,
         vmin=vmin_psf, vmax=vmax_psf,
     ).show()

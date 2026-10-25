@@ -87,6 +87,19 @@ class OpticalConfig:
         ``REFERENCE_TECHNIQUE.md``) instead of the standard Noll basis —
         recommended for an obstructed pupil (central obstruction,
         spiders). ``False`` (default) keeps the historical behaviour.
+    aperture_px : int, optional
+        Diameter [px] of the aperture within ``mask``, when it does not
+        fill the whole ``psf``/``mask`` array — e.g. the ``N_pup_target``
+        returned by ``io_utils.load_and_prepare_mask`` whenever it differs
+        from ``psf.shape[0]`` (multi-resolution / oversampling, §12 of
+        ``REFERENCE_TECHNIQUE.md``), or a ``PupilGenerator(npix,
+        aperture_px=...)`` mask built directly in memory. **Must match**
+        whatever was actually used to build ``mask``: otherwise the
+        Zernike basis is evaluated as if the aperture filled the whole
+        array — a silent scale mismatch (see §12.5 and
+        ``optics.build_zernike_basis``). ``None`` (default): the aperture
+        fills the array (historical behaviour, correct only when that is
+        actually the case).
     known_ho_wfe_nm : NDArray, optional
         Known, **fixed** wavefront-error map [nm] — typically a high-order
         (HO) contribution beyond ``zernike_order``, measured independently
@@ -109,6 +122,7 @@ class OpticalConfig:
     zernike_priors: Optional[Dict[int, Tuple[float, float]]] = None
     zernike_bounds: Optional[Dict[int, Tuple[float, float]]] = None
     orthogonal_basis: bool = False
+    aperture_px: Optional[int] = None
     known_ho_wfe_nm: Optional[NDArray[np.float64]] = None
 
 
@@ -224,7 +238,7 @@ def fit_zernike_from_psf(
     """
     basis = resolve_zernike_basis(
         npix=psf.shape[0], nterms=cfg.zernike_order, mask=mask,
-        orthogonalize=cfg.orthogonal_basis,
+        orthogonalize=cfg.orthogonal_basis, aperture_px=cfg.aperture_px,
     )
 
     known_phase_rad = None

@@ -78,3 +78,88 @@ def test_defocus_reduces_peak_strehl_like_ratio():
 
     # Une aberration étale l'énergie : le pic baisse (à énergie totale égale).
     assert psf_defocus.max() < psf0.max()
+
+
+# ----------------------------------------------------------------------
+# aperture_px : ouverture plus petite que le cadre (suréchantillonnage en
+# mémoire, §12.5 de REFERENCE_TECHNIQUE.md).
+# ----------------------------------------------------------------------
+
+def test_pupil_aperture_px_none_matches_full_frame_default():
+    """``aperture_px=None`` reproduit exactement le comportement historique."""
+    npix = 64
+    mask_default = PupilGenerator(npix).simple_disk()
+    mask_explicit = PupilGenerator(npix, aperture_px=npix).simple_disk()
+    assert np.array_equal(mask_default, mask_explicit)
+
+
+def test_pupil_aperture_px_smaller_than_npix_pads_with_zeros():
+    npix, aperture_px = 128, 64
+    mask = PupilGenerator(npix, aperture_px=aperture_px).simple_disk()
+
+    # Surface proche de pi*r^2 pour r=aperture_px//2, pas r=npix//2.
+    expected_area = np.pi * (aperture_px // 2) ** 2
+    assert mask.sum() == pytest.approx(expected_area, rel=0.02)
+    # Zéro loin du centre : la marge de suréchantillonnage est bien vide.
+    assert mask[0, 0] == 0.0
+    assert mask[npix // 2, 0] == 0.0
+
+
+def test_pupil_aperture_px_rejects_larger_than_npix():
+    with pytest.raises(ValueError):
+        PupilGenerator(64, aperture_px=128)
+
+
+def test_pupil_with_spiders_scales_to_aperture_px_not_npix():
+    """
+    Les bras d'araignée doivent balayer l'ouverture réelle (aperture_px),
+    pas tout le cadre (npix) — sinon ``width`` (fraction du rayon de la
+    pupille) serait mal mis à l'échelle dès que aperture_px < npix.
+    """
+    npix, aperture_px = 128, 64
+    gen = PupilGenerator(npix, aperture_px=aperture_px)
+    pupil = gen.with_spiders(obscuration=0.3, n_spiders=4, width=0.05)
+
+    # Un bras doit couper l'ouverture (retirer des pixels par rapport à
+    # l'annulaire pur), mais rester localisé près du centre (dans
+    # aperture_px), pas s'étendre jusqu'au bord du cadre npix.
+    annular_only = gen.annular(obscuration=0.3)
+    assert pupil.sum() < annular_only.sum()
+    assert pupil[npix // 2, npix // 2 + aperture_px // 2 + 10] == 0.0  # hors ouverture : déjà à 0
+
+
+def test_build_zernike_basis_aperture_px_reaches_full_dynamic_range_inside_aperture():
+    """
+    Régression du bug corrigé (§12.5) : sans ``aperture_px``, un mode
+    (ex. Z4, défocus) évalué sur toute l'ouverture réelle plus petite que
+    le cadre ne parcourt qu'une fraction tronquée de sa dynamique propre
+    (jamais +1), et sa RMS sur l'ouverture n'est pas 1 comme l'exige la
+    normalisation de Noll — alors qu'avec ``aperture_px`` correctement
+    renseigné, les deux sont corrects.
+    """
+    npix, aperture_px = 128, 64
+    mask = PupilGenerator(npix, aperture_px=aperture_px).simple_disk()
+    inside = mask > 0
+
+    z4_wrong = build_zernike_basis(npix=npix, nterms=4)[3]
+    z4_right = build_zernike_basis(npix=npix, nterms=4, aperture_px=aperture_px)[3]
+
+    def rms_inside(z):
+        return float(np.sqrt(np.mean(z[inside] ** 2)))
+
+    # Mauvaise échelle : la moitié positive du défocus (rho > ~0.7 en
+    # échelle correcte) n'est jamais atteinte dans l'ouverture réelle.
+    assert z4_wrong[inside].max() < 0.0
+    assert rms_inside(z4_wrong) == pytest.approx(1.32, abs=0.02)
+
+    # Bonne échelle : dynamique complète (+-sqrt(3)) et RMS de Noll (= 1).
+    assert z4_right[inside].max() == pytest.approx(np.sqrt(3), rel=1e-6)
+    assert z4_right[inside].min() == pytest.approx(-np.sqrt(3), rel=1e-6)
+    assert rms_inside(z4_right) == pytest.approx(1.0, abs=0.02)
+
+
+def test_build_zernike_basis_aperture_px_none_matches_historical_default():
+    npix = 64
+    basis_default = build_zernike_basis(npix=npix, nterms=6)
+    basis_explicit_full = build_zernike_basis(npix=npix, nterms=6, aperture_px=npix)
+    assert np.array_equal(basis_default, basis_explicit_full)

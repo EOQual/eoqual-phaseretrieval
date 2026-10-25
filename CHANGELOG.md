@@ -1,195 +1,159 @@
 # Change Log
 
-## Version History
+## 0.1.0 (2026-09-08)
 
-Non publié
+- Première version publique. 3 méthodes de récupération de phase
+  (réimplémentations propres, MIT) : `gerchberg_saxton`, `optimization`,
+  `phase_diversity`, derrière un point d'entrée unique
+  `pipeline.psf_to_wfe(method=...)`. Registre `config.METHODS_CONFIGS` +
+  `runner.list_methods()`.
+- Décomposition en coefficients de Zernike (ordre de Noll) commune aux
+  trois méthodes (`zernike_fit.py`), avec résolution de l'ambiguïté de
+  signe par a priori (`resolve_sign_ambiguity`, §3.7) et base Gram-Schmidt
+  pour pupilles obstruées (`zernike_basis_orthogonal.ZernikeGramSchmidt`).
+- Diagnostics optiques indépendants du fit Zernike (`diagnostics.py`) :
+  Strehl, WFE RMS (Maréchal), MTF, ellipticité.
+- Module de simulation séparé (`eoqual.phaseretrieval.simulation`) : PSF
+  (ou paire focus/défocus) à vérité de Zernike connue, bruit détecteur
+  optionnel (Poisson + lecture) — banc de test pour les trois méthodes
+  (`tests/test_simulation_roundtrip.py`).
+- Documentation : `README.md`, `REFERENCE_TECHNIQUE.md`,
+  `THIRD_PARTY_LICENSES.md`, `CONTRIBUTING.md`.
+- Option `orthogonal_basis` (`ZernikeConfig`/`OpticalConfig`/
+  `PhaseDiversityConfig`/`psf_to_wfe`/`--orthogonal_basis`) : base de
+  Zernike ré-orthogonalisée par Gram-Schmidt sur le masque réel,
+  recommandée pour une pupille obstruée (`False` par défaut). Étendue au
+  module de simulation (`tests/test_simulation_orthogonal.py`).
+- `zernike_fit.project_orthogonal_to_standard` : reconvertit des
+  coefficients Gram-Schmidt vers la base de Noll standard pour
+  l'interprétation (§10.2).
+- Option `known_ho_wfe_nm` (`OpticalConfig`/`PhaseDiversityConfig`/
+  `psf_to_wfe(..., known_ho_wfe_path=...)`/`--known_ho_wfe`) : incorpore
+  une carte de WFE haut ordre connue au modèle direct (additive, jamais
+  optimisée) — débiaise les coefficients bas ordre (§11.3,
+  `tests/test_known_ho_wfe.py`). Ignorée pour `"gerchberg_saxton"`.
+- Correctif : `backends.optimization.residuals` clippe `measured_psf` à
+  des valeurs non négatives avant la racine carrée (une PSF bruitée
+  réaliste peut être légèrement négative) — évitait un crash
+  `least_squares`.
+- `examples/psf2zernike_demo.ipynb` : références obsolètes corrigées ;
+  section « Fonctionnalités avancées » (simulation en mémoire,
+  `orthogonal_basis`, `known_ho_wfe_nm`).
+- **Correctif (bug significatif)** : `pupil.PupilGenerator` clippait son
+  rayon à 1.0 avant le test de délimitation de la pupille, renvoyant un
+  masque plein cadre au lieu d'un disque/anneau réel — non détecté car
+  les tests round-trip étaient auto-cohérents (même masque biaisé utilisé
+  pour simuler *et* ajuster). Régression couverte
+  (`tests/test_optics_and_pupil.py`) ; exemples numériques du §10/§10.2
+  recalculés.
+- **Résolutions multiples** (masque/carte HO/PSF à des résolutions
+  natives indépendantes, §12) : `detector_size` remplacé par
+  `pixel_pitch` + `oversampling` (changement cassant) ;
+  `io_utils.compute_pupil_footprint_px`/`load_and_prepare_ho_wfe` ;
+  interpolation bilinéaire + anti-aliasing pour le masque, option
+  `binarize` (`tests/test_multi_resolution.py`).
+- **Masque/carte HO plus grands que l'ouverture** (marge de zéros, §12.3) :
+  `mask_native_aperture_px`/`ho_native_aperture_px` (+ auto-détection) et
+  `*_native_aperture_center` pour une ouverture décentrée dans le fichier
+  source.
+- **A priori individuels par mode** (`zernike_priors`/`zernike_bounds`,
+  nouveau module `zernike_priors.py`) sur `OpticalConfig`/
+  `PhaseDiversityConfig`/`psf_to_wfe` : généralisation de `l2_reg` à une
+  moyenne/poids propre à chaque mode (pénalité L2 = MAP gaussien, borne
+  dure = MAP uniforme ; dérivation en §6.5bis). Ignoré pour
+  `"gerchberg_saxton"`. Correctif associé (`zernike_priors.feasible_start`) :
+  démarrer exactement sur une borne finie faisait déclarer à
+  `least_squares` une convergence fictive.
+- `license.txt` : titulaire des droits (Olivier Amram) au lieu du nom du
+  module.
 
-:   -   `license.txt` : titulaire des droits (Olivier Amram) au lieu du
-        nom du module.
+## 0.2.0 (2026-10-25)
 
-0.1.0 (2026-09-08)
+- **Correctif (bug significatif, §12.5)** : la base de Zernike était
+  toujours évaluée en supposant que l'ouverture remplit tout le cadre,
+  alors que `oversampling > 1` (§12.1) la zero-padde dans un cadre plus
+  grand — faussait l'échelle de tous les modes dès que l'ouverture ne
+  remplissait pas le cadre (défocus tronqué, RMS ≠ 1 de Noll). `pipeline.py`
+  calculait déjà `N_pup_target` mais le jetait sans le transmettre à la
+  base (`mask, _ = load_and_prepare_mask(...)`). Non détecté pour la même
+  raison que le bug `PupilGenerator` ci-dessus : les tests de bout en bout
+  du §12 construisaient leur propre vérité terrain avec le même appel non
+  paramétré que celui utilisé en interne par `psf_to_wfe` — les deux
+  fausses de la même façon, donc cohérentes entre elles, sans jamais être
+  comparées à une géométrie de référence correcte. Corrigé par un nouveau
+  paramètre `aperture_px`, propagé de `pupil.polar_grid`/`PupilGenerator`/
+  `build_zernike_basis` jusqu'à `pipeline.psf_to_wfe`. Aucun changement
+  d'API publique ni de comportement par défaut. Les deux tests concernés
+  corrigés pour construire leur vérité avec le même `aperture_px`
+  (`tests/test_multi_resolution.py`).
+- `PupilGenerator(npix, aperture_px=...)` et
+  `simulation.simulate_psf_from_zernike`/
+  `PhaseDiversitySimulationConfig(aperture_px=...)` : suréchantillonnage
+  en mémoire, sans fichier, cohérent avec la base de Zernike.
+- **Correctif** : `load_and_prepare_mask`/`load_and_prepare_ho_wfe`
+  ignoraient toute marge de zéros autour de l'ouverture dès que le
+  fichier source faisait déjà la même taille de tableau que la PSF
+  (branche "pas de mise à l'échelle physique") — seule la branche
+  "résolution différente" détectait une telle marge (§12.3). Même taille
+  de tableau que la PSF ne veut dire que ça : même résolution, pas
+  "ouverture déjà cadrée sur le fichier". Corrigé : la détection/recadrage
+  (`_crop_to_aperture`) s'applique maintenant aussi dans ce cas,
+  recentrant l'ouverture sans changer sa résolution quand une marge est
+  trouvée (`aperture_px` renseigné en conséquence) ; comportement
+  inchangé quand l'ouverture remplit effectivement le cadre (le cas le
+  plus courant). 5 tests dédiés (`tests/test_multi_resolution.py`).
+- La taille de l'ouverture estimée est maintenant toujours visible dans
+  les logs (`logger.info`/`logger.warning` selon le cas) — auparavant
+  seulement en `logger.debug` sur le chemin "résolution différente", et
+  absente du tout sur les deux chemins "déjà sur la grille de la PSF".
+- **FTM : coupes H/V, axe de fréquence réduite, fréquence de coupure**
+  (§9.5) : `diagnostics.mtf_frequency_axis`/`mtf_cutoff_frequency`/
+  `mtf_cuts` (fonctions numériques pures — restées ici plutôt que dans
+  `eoqual-core`, dont la règle de gouvernance n'admet une brique qu'à
+  partir de deux modules consommateurs) et `io_utils.plot_mtf_cuts`
+  (figure Plotly : coupes H/V, référence optionnelle, repère `fc`).
+  Démontré dans `examples/psf2zernike_demo.ipynb`.
+- **Fonctions graphiques génériques extraites vers
+  [`eoqual-viz`](https://github.com/EOQual/eoqual-viz)**, nouveau paquet
+  public : `io_utils.plot_array_plotly` (renommé `eoqual.viz.plot_array`)
+  et la mécanique Plotly de `io_utils.plot_mtf_cuts` (généralisée en
+  `eoqual.viz.plot_curve_grid`, comparaison de courbes/coupes avec
+  repères verticaux, pas spécifique à une FTM). `io_utils.plot_mtf_cuts`
+  reste ici comme fine enveloppe spécifique (assemble les coupes/fc puis
+  appelle `eoqual.viz.plot_curve_grid`) ; `visualisation_diagnostics`
+  appelle désormais `eoqual.viz.plot_array`. Nouvelle dépendance
+  `eoqual-viz` (voir §6.1 de `REFERENCE_TECHNIQUE.md`). `examples/*.ipynb`
+  mis à jour et ré-exécutés (aucune erreur).
 
-:   -   Première version publique.
-    -   **3 méthodes** dans le socle (MIT, réimplémentations propres à
-        partir des articles cités — aucun portage de code tiers) :
-        `gerchberg_saxton`, `optimization`, `phase_diversity`, toutes
-        derrière un point d'entrée unique
-        `eoqual.phaseretrieval.pipeline.psf_to_wfe(method=...)`.
-    -   Registre central (`config.py::METHODS_CONFIGS`) et utilitaire de
-        découverte `eoqual.phaseretrieval.runner.list_methods()`.
-    -   Décomposition en coefficients de Zernike (ordre de Noll) commune
-        aux trois méthodes (`zernike_fit.py`), y compris la résolution de
-        l'ambiguïté de signe par a priori (`resolve_sign_ambiguity`) et
-        une base Zernike ré-orthogonalisée pour pupilles obstruées
-        (`zernike_basis_orthogonal.ZernikeGramSchmidt`).
-    -   Diagnostics de qualité optique indépendants du fit Zernike
-        (`diagnostics.py`) : Strehl, WFE RMS (Maréchal), MTF, ellipticité.
-    -   **Module de simulation séparé**
-        (`eoqual.phaseretrieval.simulation`) : génération d'une PSF (ou
-        d'une paire focus/défocus) à vérité de Zernike connue, avec bruit
-        détecteur réaliste optionnel (Poisson + lecture,
-        `simulation.noise.DetectorNoiseConfig`) — sert de banc de test
-        pour les trois méthodes, sans dépendre de données figées
-        (`tests/test_simulation_roundtrip.py`).
-    -   Documentation : `README.md` (installation, catalogue, licence),
-        `REFERENCE_TECHNIQUE.md` (théorie, implémentation, limites,
-        cas d'usage télédétection), `THIRD_PARTY_LICENSES.md`,
-        `CONTRIBUTING.md`.
-    -   Architecture en paquet `src/eoqual/phaseretrieval` : une méthode
-        de récupération de phase = un module de `backends/`.
-    -   Option `orthogonal_basis` (`ZernikeConfig`, `OpticalConfig`,
-        `PhaseDiversityConfig`, `psf_to_wfe(...)`/`--orthogonal_basis` en
-        CLI) : bascule les trois méthodes sur une base de Zernike
-        ré-orthogonalisée par Gram-Schmidt sur le masque réel
-        (`zernike_basis_orthogonal.ZernikeGramSchmidt`, déjà présent mais
-        jusqu'ici non branché) plutôt que la base de Noll standard —
-        recommandé pour une pupille obstruée. `False` par défaut,
-        comportement historique inchangé.
-    -   `eoqual.phaseretrieval.simulation` étendu à `orthogonal_basis`
-        (`simulate_psf_from_zernike`, `PhaseDiversitySimulationConfig`) :
-        génère une vérité terrain directement dans la base Gram-Schmidt du
-        masque, pour valider `orthogonal_basis=True` de bout en bout sans
-        le biais de changement de base identifié à l'introduction de cette
-        option (`tests/test_simulation_orthogonal.py`).
-    -   `zernike_fit.project_orthogonal_to_standard` : reconvertit des
-        coefficients ajustés en base Gram-Schmidt vers la base de Noll
-        standard (Z4 = défocus, …) pour l'interprétation — conversion
-        linéaire exacte (aux erreurs de conditionnement/convergence en
-        amont près), voir REFERENCE_TECHNIQUE.md §10.2.
-    -   Option `known_ho_wfe_nm` (`OpticalConfig`, `PhaseDiversityConfig`,
-        `psf_to_wfe(..., known_ho_wfe_path=...)`/`--known_ho_wfe` en CLI) :
-        incorpore une carte de WFE haut ordre (HO) connue, mesurée
-        indépendamment, au modèle direct — additive en phase (nouvelle
-        fonction `optics.wfe_map_to_phase`), jamais optimisée, dans les
-        deux méthodes basées optimisation (pour `"phase_diversity"`,
-        ajoutée aux deux canaux focus/défocus). Débiaise les coefficients
-        bas ordre estimés d'une contribution HO non modélisée par ailleurs
-        (voir REFERENCE_TECHNIQUE.md §11.3) — vérifié empiriquement
-        (`tests/test_known_ho_wfe.py`) : sans la carte, un $Z_{21}$ connu
-        de 40 nm biaise $Z_4$ de plus de 20 nm ; avec, la vérité est
-        recouvrée exactement. Ignorée (avec avertissement) pour
-        `"gerchberg_saxton"`. `eoqual.phaseretrieval.simulation` accepte le
-        même paramètre pour générer des cas de test correspondants.
-    -   Correctif de robustesse : `backends.optimization.residuals` clippe
-        désormais `measured_psf` à des valeurs non négatives avant la
-        racine carrée (comme le fait déjà `gerchberg_saxton` pour sa cible
-        d'amplitude) — une PSF bruitée réaliste (bruit de lecture gaussien,
-        `simulation.noise.DetectorNoiseConfig`) peut contenir des pixels
-        légèrement négatifs, ce qui faisait auparavant échouer
-        `least_squares` ("Residuals are not finite"). Découvert en
-        exécutant `examples/psf2zernike_demo.ipynb` de bout en bout ;
-        régression couverte par
-        `tests/test_simulation_roundtrip.py::test_optimization_runs_on_noisy_psf_with_negative_pixels`.
-    -   `examples/psf2zernike_demo.ipynb` : références obsolètes corrigées
-        (chemins de module `retrieval_*.py`/`pipeline.py` pré-réorganisation
-        en paquet, restées dans des cellules de prose depuis le transfert
-        initial) et nouvelle section « Fonctionnalités avancées »
-        démontrant le module de simulation en mémoire, `orthogonal_basis` +
-        `project_orthogonal_to_standard`, et `known_ho_wfe_nm` — les trois
-        n'étaient jusqu'ici couverts par aucun exemple exécutable. Les deux
-        notebooks (`examples/*.ipynb`) sont ré-exécutés de bout en bout
-        (aucune erreur) pour valider l'ensemble.
-    -   **Correctif — bug significatif** : `pupil.PupilGenerator` clippait
-        son rayon normalisé à 1.0 *avant* le test `rho <= 1.0` utilisé par
-        `simple_disk()`/`annular()`/`with_spiders()`, rendant ce test
-        toujours vrai — les trois méthodes renvoyaient un masque **plein
-        cadre** (tous les pixels à 1, y compris les coins) plutôt qu'un
-        disque/anneau réellement borné. Aucun test existant ne l'avait
-        détecté (seul le pixel central était vérifié) : les nombreux
-        essais round-trip restaient parfaitement cohérents en interne
-        (même masque, biaisé, utilisé pour simuler *et* ajuster), sans
-        jamais comparer à une géométrie de référence indépendante. Corrigé
-        (retrait du `np.clip`) ; régression couverte
-        (`tests/test_optics_and_pupil.py::test_pupil_simple_disk_excludes_corners`/
-        `test_pupil_annular_excludes_corners_and_outer_ring`). Trouvé en
-        vérifiant la prise en compte de résolutions multiples (point
-        suivant). Tous les exemples numériques de `REFERENCE_TECHNIQUE.md`
-        calculés sur un masque annulaire (§10, §10.2) recalculés en
-        conséquence ; les deux notebooks ré-exécutés une nouvelle fois (un
-        cas de démo à `zernike_order=15` s'est révélé sujet à un minimum
-        local isolé avec la géométrie de pupille désormais correcte —
-        réduit à 12, cf. `tests/test_simulation_roundtrip.py`).
-    -   **Masque, carte de WFE haut ordre et PSF à des résolutions natives
-        indépendantes** (y compris une PSF suréchantillonnée par
-        super-résolution) — REFERENCE_TECHNIQUE.md §12 :
-        - `detector_size` remplacé par `pixel_pitch` (pas-pixel natif du
-          détecteur, constante capteur) + `oversampling` (entier, défaut
-          `1`) sur `psf_to_wfe`/`load_and_prepare_mask`/CLI — rend explicite
-          un contrat auparavant implicite dans le nom du paramètre.
-          Changement cassant, tous les appelants mis à jour (pipeline,
-          CLI, README, notebook).
-        - Nouvelle fonction partagée `io_utils.compute_pupil_footprint_px`
-          (masque et carte HO dérivent le même `N_pup_target`, donc restent
-          co-enregistrés même à partir de fichiers sources différents).
-        - Nouvelle fonction `io_utils.load_and_prepare_ho_wfe` : la carte
-          HO peut désormais venir de sa propre résolution native
-          (interpolation cubique, jamais binarisée) — jusqu'ici
-          `known_ho_wfe_nm`/`known_ho_wfe_path` exigeaient une égalité
-          stricte de forme avec le masque.
-        - `load_and_prepare_mask` : interpolation bilinéaire + anti-aliasing
-          (au lieu du plus-proche-voisin sans anti-aliasing) avant un
-          éventuel seuillage binaire ; nouveau `binarize` (`True` par
-          défaut) pour conserver une transmission graduée `[0, 1]` plutôt
-          qu'un seuil dur — perd moins d'information au rééchantillonnage
-          dans les deux cas. Le raccourci « masque déjà à la résolution de
-          la PSF → pas de mise à l'échelle » passe de `logger.debug` à
-          `logger.warning`, pour ne plus passer inaperçu.
-        - Tests dédiés (`tests/test_multi_resolution.py`, 6 tests) :
-          invariance de `N_pup_target` au suréchantillonnage cohérent,
-          masque/carte HO à des résolutions natives différentes l'une de
-          l'autre et de la PSF, bout en bout via `psf_to_wfe`.
-    -   **Masque/carte HO plus grand que l'ouverture** (marge de zéros
-        autour, fichier non cadré exactement sur l'ouverture) —
-        REFERENCE_TECHNIQUE.md §12.3 : nouveaux `mask_native_aperture_px`/
-        `ho_native_aperture_px` (`psf_to_wfe`/`load_and_prepare_mask`/
-        `load_and_prepare_ho_wfe`/CLI) pour indiquer explicitement le
-        nombre de pixels qu'occupe l'ouverture dans le fichier source ;
-        par défaut, auto-détection de sa boîte englobante
-        (`aperture_threshold=0.01` par défaut, fraction du maximum du
-        fichier) — sans effet quand l'ouverture remplit déjà tout le
-        fichier. Avant ce correctif, une telle marge était comprimée avec
-        l'ouverture dans `N_pup_target` au lieu d'être ignorée, rendant
-        l'ouverture reconstruite artificiellement plus petite. 4 tests
-        dédiés (`tests/test_multi_resolution.py`), dont un bout en bout
-        avec masque *et* carte HO chacun sur un cadre plus grand que leur
-        ouverture, à des tailles de marge différentes entre les deux.
-    -   `native_aperture_px` seul suppose l'ouverture **centrée** dans le
-        fichier source (marges égales des deux côtés) — nouveaux
-        `mask_native_aperture_center`/`ho_native_aperture_center`
-        (`(row, col)`, `--mask_native_aperture_center ROW COL`/
-        `--ho_native_aperture_center ROW COL` en CLI) pour le cas
-        contraire ; l'auto-détection (sans `*_native_aperture_px`)
-        localise déjà une ouverture décentrée sans réglage
-        supplémentaire. 4 tests dédiés
-        (`tests/test_multi_resolution.py`), dont un qui fige explicitement
-        le comportement "faux silencieusement" de `native_aperture_px`
-        seul sur une ouverture réellement décentrée (pour qu'un futur
-        changement de ce contrat soit visible).
-
-    -   **A priori individuels par mode** (`zernike_priors`/
-        `zernike_bounds`, nouveau module
-        `zernike_priors.py`) sur `OpticalConfig`, `PhaseDiversityConfig` et
-        `psf_to_wfe(...)` : généralisation de `l2_reg` (a priori gaussien
-        centré sur zéro, poids uniforme) à un a priori **individuel** par
-        mode de Noll — moyenne et écart-type propres (`zernike_priors`,
-        pénalité L2 = MAP gaussien) ou borne dure (`zernike_bounds`, MAP à
-        prior uniforme). Dérivation complète (pourquoi une pénalité L2 et
-        une borne dure sont, mathématiquement, deux vocabulaires pour le
-        même MAP bayésien) dans `REFERENCE_TECHNIQUE.md` §6.5bis. Ignoré
-        (avec avertissement) pour `"gerchberg_saxton"`. Démonstration dans
-        `examples/psf2zernike_demo.ipynb` : sans a priori, un ajustement
-        mono-PSF à l'ordre 12 retombe sur la branche de signe inversé pour
-        les modes pairs (§3.7, $Z_4$/$Z_6$) ; un a priori individuel fort
-        et correct sur ces modes lève l'ambiguïté et débiaise
-        l'estimation, sans seconde image de diversité.
-    -   Correctif de robustesse (`zernike_priors.feasible_start`) :
-        démarrer un ajustement borné (`zernike_bounds`) exactement sur une
-        borne finie (ex. `(0.0, ...)`) dégradait la mise à l'échelle
-        interne de `scipy.optimize.least_squares(method="trf")` au point
-        de déclencher une convergence immédiate et fictive dès la première
-        évaluation, sans qu'aucune optimisation n'ait eu lieu — corrigé en
-        écartant le point de départ d'une borne finie sur laquelle il
-        tomberait exactement.
+- **Rupture d'unité (§9.5)** : l'axe de fréquence réduite de la FTM
+  (`mtf_frequency_axis`, `mtf_cutoff_frequency`, `io_utils.plot_mtf_cuts`)
+  est maintenant exprimé en fraction de `fe` (fréquence d'échantillonnage)
+  plutôt que de `fe/2` (Nyquist) — `fe/2` vaut donc `0,5` au lieu de
+  `1,0`. `plot_mtf_cuts` trace désormais systématiquement un repère `fe/2`
+  en bleu, en plus de `fc` en rouge si fourni (nécessite `eoqual-viz` ≥
+  la version avec `vlines=(valeur, étiquette, couleur)`, rupture d'API
+  mineure côté `eoqual-viz` elle-même).
+- `diagnostics.mtf_value_at`/`mtf_integral` : valeur interpolée de la FTM
+  à une fréquence donnée, intégrale entre `0` et une fréquence max (règle
+  des trapèzes) — pour résumer une coupe de FTM en quelques chiffres.
+- `diagnostics.encircled_energy`/`fwhm` : délèguent respectivement à
+  `eoqual.core.psf.encircled_energy` et `eoqual.core.edge.fwhm` (déjà
+  présentes dans `eoqual-core`, utilisées par d'autres modules — aucune
+  nouvelle brique à y faire accepter). `fwhm`, conçue pour une LSF, est
+  purement générique et s'applique directement à une coupe de PSF.
+- `examples/psf2zernike_demo.ipynb` : les trois exemples de la section
+  « Fonctionnalités avancées » (suréchantillonnage en mémoire, lecture
+  d'une PSF, tirage aléatoire de Zernike) affichent désormais, en plus de
+  la FTM : un tableau `pandas` des valeurs de FTM à `fe/4`/`fe/2` et de
+  son intégrale `[0, fe/2]`, et un tableau `pandas` de métriques PSF
+  (Strehl, FWHM H/V, énergie encerclée à 2 et 5 px) comparant la PSF
+  simulée/mesurée à la PSF récupérée/reconstruite.
+- **« Interface CLI unifiée » et « Organisation du code » déplacées du
+  notebook vers `README.md`** (nouvelles sections, avec ancre dans le
+  Sommaire) : plus à leur place dans une référence stable (CLI,
+  arborescence du paquet) que dans un notebook de démonstration. Le
+  Sommaire de `examples/psf2zernike_demo.ipynb` renvoie désormais vers
+  `README.md` pour ces deux sujets.
 
 ## Évolutions futures
 

@@ -10,12 +10,21 @@ de phase basées sur une optimisation (``backends.optimization``,
 
 from __future__ import annotations
 
+from typing import Optional
+
 import numpy as np
 import poppy.zernike as zern
 from numpy.typing import NDArray
 
+from .pupil import polar_grid
 
-def build_zernike_basis(npix: int, nterms: int) -> NDArray[np.float64]:
+
+def build_zernike_basis(
+    npix: int,
+    nterms: int,
+    *,
+    aperture_px: Optional[int] = None,
+) -> NDArray[np.float64]:
     """
     Generate a Zernike basis (Noll ordering).
 
@@ -25,13 +34,32 @@ def build_zernike_basis(npix: int, nterms: int) -> NDArray[np.float64]:
         Size (in pixels) of the square array on which each mode is sampled.
     nterms : int
         Number of Zernike modes to generate.
+    aperture_px : int, optional
+        Diameter [px] of the aperture the basis is normalised to, within
+        the ``npix x npix`` array — **must match** the ``aperture_px`` used
+        to build the pupil mask this basis is paired with (e.g.
+        ``pupil.PupilGenerator(npix, aperture_px=...)``, or the
+        ``N_pup_target`` returned by ``io_utils.load_and_prepare_mask``
+        when it differs from ``npix``). ``None`` (default): the aperture
+        is assumed to fill the whole array (``aperture_px = npix``,
+        historical behaviour) — correct only when that is actually the
+        case. See §12.5 of ``REFERENCE_TECHNIQUE.md`` for why this matters:
+        with a smaller aperture and the default ``rho``/``theta`` (which
+        always place the unit circle at the array's own edge), each
+        Zernike mode would only ever be evaluated over its own innermost,
+        wrongly-normalised fraction inside the true aperture — e.g.
+        defocus would never reach its ``+1`` lobe, and its RMS over the
+        aperture would not be 1 as the Noll normalisation requires.
 
     Returns
     -------
     NDArray
         Zernike basis, shape ``(nterms, npix, npix)``.
     """
-    return zern.zernike_basis(nterms=nterms, npix=npix, outside=0.0)
+    if aperture_px is None or aperture_px == npix:
+        return zern.zernike_basis(nterms=nterms, npix=npix, outside=0.0)
+    rho, theta = polar_grid(npix, aperture_px)
+    return zern.zernike_basis(nterms=nterms, rho=rho, theta=theta, outside=0.0)
 
 
 def phase_from_coefficients(

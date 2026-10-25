@@ -73,6 +73,16 @@ class PhaseDiversitySimulationConfig:
         diversité (voir §11.3 de ``REFERENCE_TECHNIQUE.md``) — pour tester
         ``PhaseDiversityConfig.known_ho_wfe_nm`` de bout en bout. ``None``
         (défaut) : pas de contribution HO.
+    aperture_px : int, optional
+        Diamètre [px] de l'ouverture à l'intérieur du cadre ``npix x
+        npix`` — contrôle du suréchantillonnage, en mémoire (voir
+        :class:`eoqual.phaseretrieval.pupil.PupilGenerator` et §12.5 de
+        ``REFERENCE_TECHNIQUE.md``). N'a d'effet que si ``mask is None``
+        dans :func:`simulate_phase_diversity_pair`. Appliqué de façon
+        cohérente au masque généré et à la base de Zernike (vérité bas
+        ordre *et* terme de diversité, tous deux construits à partir de la
+        même base). ``None`` (défaut) : l'ouverture remplit le cadre
+        (comportement historique).
     """
 
     wavelength: float = 550e-9
@@ -82,6 +92,7 @@ class PhaseDiversitySimulationConfig:
     noise: Optional[DetectorNoiseConfig] = None
     orthogonal_basis: bool = False
     known_ho_wfe_nm: Optional[NDArray[np.float64]] = None
+    aperture_px: Optional[int] = None
 
 
 def simulate_phase_diversity_pair(
@@ -126,6 +137,7 @@ def simulate_phase_diversity_pair(
           coefficients récupérés (ajustés avec le *même* réglage).
         - ``"defocus"``, ``"wavelength"`` : rappel des paramètres utilisés.
         - ``"orthogonal_basis"`` : rappel du réglage utilisé.
+        - ``"aperture_px"`` : rappel du réglage utilisé (ou ``None``).
         - ``"known_ho_wfe_nm"`` : rappel de la carte HO utilisée (ou ``None``).
 
     Raises
@@ -137,14 +149,14 @@ def simulate_phase_diversity_pair(
         ``cfg.known_ho_wfe_nm`` n'a pas la forme de ``mask``.
     """
     if mask is None:
-        mask = PupilGenerator(cfg.npix).simple_disk()
+        mask = PupilGenerator(cfg.npix, aperture_px=cfg.aperture_px).simple_disk()
 
     coeffs_arr_nm = coeffs_to_array(coeffs_nm, cfg.zernike_order)
     rad_to_nm = cfg.wavelength * 1e9 / (2.0 * np.pi)
 
     basis = resolve_zernike_basis(
         npix=cfg.npix, nterms=cfg.zernike_order, mask=mask,
-        orthogonalize=cfg.orthogonal_basis,
+        orthogonalize=cfg.orthogonal_basis, aperture_px=cfg.aperture_px,
     )
     phase_rad = phase_from_coefficients(coeffs_arr_nm / rad_to_nm, basis, mask)
     if cfg.known_ho_wfe_nm is not None:
@@ -173,5 +185,6 @@ def simulate_phase_diversity_pair(
         "defocus": cfg.defocus,
         "wavelength": cfg.wavelength,
         "orthogonal_basis": cfg.orthogonal_basis,
+        "aperture_px": cfg.aperture_px,
         "known_ho_wfe_nm": cfg.known_ho_wfe_nm,
     }

@@ -15,21 +15,25 @@ Origine : utilitaires ``PSFAnalyzer``/``PSFMetrics`` d'un prototype
 antérieur de l'auteur, adaptés au style et aux conventions de ce projet
 (NumPy docstrings, typing, réutilisation de ``optics.py``).
 
-``airy_psf``, ``strehl_ratio`` et ``radial_profile`` délèguent à
-``eoqual.core.psf`` (partagé avec eoqual-measure) ; ``strehl_ratio``
-garde ici son avertissement via loguru.
+``airy_psf``, ``strehl_ratio``, ``radial_profile`` et ``encircled_energy``
+délèguent à ``eoqual.core.psf`` (partagé avec eoqual-measure) ;
+``strehl_ratio`` garde ici son avertissement via loguru. ``fwhm`` délègue
+à ``eoqual.core.edge.fwhm`` — conçue pour une LSF, mais purement
+générique (une coupe 1D avec un seul pic) : s'applique directement à une
+coupe de PSF (voir :func:`mtf_cuts`, le même principe sur une FTM).
 """
 
 from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Tuple
 
 import numpy as np
 from loguru import logger
 from numpy.typing import NDArray
 
+from eoqual.core import edge as core_edge
 from eoqual.core import psf as core_psf
 
 
@@ -183,6 +187,57 @@ def radial_profile(psf: NDArray[np.float64]) -> NDArray[np.float64]:
     return core_psf.radial_profile(psf)
 
 
+def encircled_energy(
+    psf: NDArray[np.float64],
+    radii: Optional[NDArray[np.float64]] = None,
+) -> Tuple[NDArray[np.float64], NDArray[np.float64]]:
+    """
+    Énergie encerclée EE(r) : fraction de l'énergie totale contenue dans
+    le disque de rayon ``r`` centré sur la PSF — délègue à
+    ``eoqual.core.psf.encircled_energy``.
+
+    Parameters
+    ----------
+    psf : NDArray
+        PSF 2D centrée (le fond doit avoir été retiré : un fond résiduel
+        fausse la normalisation).
+    radii : NDArray, optional
+        Rayons [px] où évaluer EE. ``None`` (défaut) :
+        ``0,5, 1,5, ...`` jusqu'au bord du plus grand cercle inscrit.
+
+    Returns
+    -------
+    radii, ee : NDArray, NDArray
+        ``ee`` croissante, égale à ``1`` si le disque couvre toute la
+        PSF.
+    """
+    return core_psf.encircled_energy(psf, radii)
+
+
+def fwhm(x: NDArray[np.float64], cut: NDArray[np.float64]) -> float:
+    """
+    Largeur à mi-hauteur d'une coupe 1D de la PSF — délègue à
+    ``eoqual.core.edge.fwhm`` (conçue pour une LSF, mais purement
+    générique : n'importe quelle coupe 1D avec un seul pic).
+
+    Parameters
+    ----------
+    x : NDArray
+        Axe des abscisses de la coupe (ex. position en pixels, centrée
+        ou non — seule l'échelle relative compte).
+    cut : NDArray
+        Coupe à mesurer (ex. coupe horizontale/verticale d'une PSF, voir
+        :func:`mtf_cuts` pour l'équivalent sur une FTM).
+
+    Returns
+    -------
+    float
+        FWHM, dans les unités de ``x`` ; ``0.0`` si la coupe ne redescend
+        pas sous la moitié de son maximum des deux côtés du pic.
+    """
+    return core_edge.fwhm(x, cut)
+
+
 def compute_mtf(psf: NDArray[np.float64]) -> NDArray[np.float64]:
     """
     Compute the (real-valued) modulation transfer function of a PSF.
@@ -201,6 +256,170 @@ def compute_mtf(psf: NDArray[np.float64]) -> NDArray[np.float64]:
     otf = np.fft.fftshift(np.fft.fft2(np.fft.ifftshift(psf_norm)))
     mtf = np.abs(otf)
     return mtf / mtf.max()
+
+
+def mtf_frequency_axis(npix: int) -> NDArray[np.float64]:
+    """
+    Axe de fréquence réduite pour une FTM de taille ``npix`` (celle
+    renvoyée par :func:`compute_mtf`), en fraction de la fréquence
+    d'échantillonnage du détecteur ``fe`` (pas de la fréquence de
+    Nyquist ``fe/2`` — voir la mise en garde ci-dessous).
+
+    Parameters
+    ----------
+    npix : int
+        Taille (pixels) du tableau PSF/FTM, carré.
+
+    Returns
+    -------
+    NDArray
+        Fréquence normalisée, longueur ``npix`` : ``0`` au centre (même
+        convention de centrage que ``compute_mtf``, qui utilise
+        ``fftshift``), ``+-0,5`` au bord du tableau. Le bord du tableau
+        correspond toujours exactement à ``fe/2`` (Nyquist), par
+        construction du modèle PSF = ``|FFT(pupille)|**2`` (une PSF de
+        ``npix`` pixels échantillonne jusqu'à ``0,5`` cycle/pixel, quelle
+        que soit l'ouverture) — **pas** à ``1,0`` : c'est la fréquence
+        d'échantillonnage ``fe`` elle-même (toujours hors du tableau,
+        jamais représentable par une FFT de signal réel) qui vaut ``1,0``
+        dans cette convention.
+    """
+    return np.fft.fftshift(np.fft.fftfreq(npix))  # dans [-0.5, 0.5), déjà en fraction de fe
+
+
+def mtf_cutoff_frequency(npix: int, aperture_px: Optional[int] = None) -> float:
+    """
+    Fréquence de coupure optique ``fc`` (diffraction), en fraction de la
+    fréquence d'échantillonnage du détecteur ``fe`` — la fréquence
+    spatiale au-delà de laquelle la FTM diffractive est exactement
+    nulle.
+
+    Vaut ``aperture_px / npix``. Justification : l'ouverture (pupille en
+    amplitude) a un diamètre ``aperture_px`` pixels dans un cadre
+    ``npix`` (voir :class:`eoqual.phaseretrieval.pupil.PupilGenerator`,
+    ``OpticalConfig.aperture_px``, §12.5 de ``REFERENCE_TECHNIQUE.md``),
+    donc un **rayon** ``aperture_px / 2``. La FTM = ``|FFT(PSF)|`` est
+    l'autocorrélation de cette pupille, dont le support a pour **rayon**
+    le double de celui de la pupille, soit ``aperture_px`` exactement
+    (vérifié numériquement) — en unités de fréquence où le bord du
+    tableau (distance ``npix / 2`` du centre) vaut ``fe/2`` (voir
+    :func:`mtf_frequency_axis`). D'où
+    ``fc / fe = (aperture_px / (npix / 2)) / 2 = aperture_px / npix``.
+
+    Parameters
+    ----------
+    npix : int
+        Taille (pixels) du tableau PSF/pupille, carré.
+    aperture_px : int, optional
+        Diamètre [px] de l'ouverture dans le cadre ``npix`` — typiquement
+        le ``N_pup_target``/``aperture_px`` déjà utilisé ailleurs dans ce
+        projet pour la base de Zernike (``io_utils.load_and_prepare_mask``,
+        ``pupil.PupilGenerator``). ``None`` (défaut) : l'ouverture remplit
+        le cadre (``aperture_px = npix``), donnant ``fc = 1.0`` — *hors*
+        de l'intervalle ``[0, 0,5]`` de Nyquist (donc hors de ce qu'une
+        FFT peut même représenter) : le modèle PSF brut, sans marge de
+        suréchantillonnage, échantillonne en-deçà du critère de Nyquist
+        pour la diffraction (``Q=1``, voir §12.1/§12.5 de
+        ``REFERENCE_TECHNIQUE.md``) ; une marge ``aperture_px = npix/2``
+        donnerait au contraire ``fc = 0,5`` (échantillonnage de Nyquist
+        exact, ``Q=2`` : ``fc`` coïncide pile avec ``fe/2``).
+
+    Returns
+    -------
+    float
+        ``fc`` en fraction de ``fe`` (``0,5`` = exactement à Nyquist,
+        ``1,0`` = à la fréquence d'échantillonnage elle-même).
+    """
+    if aperture_px is None:
+        aperture_px = npix
+    return aperture_px / npix
+
+
+def mtf_cuts(mtf: NDArray[np.float64]) -> Tuple[NDArray[np.float64], NDArray[np.float64]]:
+    """
+    Coupes horizontale et verticale d'une FTM 2D, passant par son centre
+    (fréquence nulle) — même convention de centrage que
+    :func:`compute_mtf`/:func:`mtf_frequency_axis`.
+
+    Parameters
+    ----------
+    mtf : NDArray
+        FTM 2D, telle que renvoyée par :func:`compute_mtf`.
+
+    Returns
+    -------
+    cut_h, cut_v : NDArray, NDArray
+        Coupe horizontale (ligne centrale, le long de l'axe des
+        fréquences en colonne) et verticale (colonne centrale), chacune
+        de même longueur que :func:`mtf_frequency_axis` pour ce ``npix``.
+    """
+    ny, nx = mtf.shape
+    return mtf[ny // 2, :], mtf[:, nx // 2]
+
+
+def mtf_value_at(
+    freq: NDArray[np.float64],
+    cut: NDArray[np.float64],
+    frequency: float,
+) -> float:
+    """
+    Valeur interpolée d'une coupe de FTM à une fréquence réduite donnée
+    (fraction de ``fe``, voir :func:`mtf_frequency_axis`) — ex.
+    ``mtf_value_at(freq, cut_h, 0.25)`` pour la valeur à ``fe/4``.
+
+    Interpolation linéaire (``numpy.interp``) : ``freq`` n'a besoin
+    d'être trié que de façon croissante (c'est le cas pour la sortie de
+    :func:`mtf_frequency_axis`).
+
+    Parameters
+    ----------
+    freq : NDArray
+        Axe de fréquence, voir :func:`mtf_frequency_axis`.
+    cut : NDArray
+        Coupe de FTM correspondante (même longueur), voir :func:`mtf_cuts`.
+    frequency : float
+        Fréquence réduite à laquelle évaluer la FTM (fraction de ``fe``).
+
+    Returns
+    -------
+    float
+        Valeur interpolée de la FTM à ``frequency``.
+    """
+    return float(np.interp(frequency, freq, cut))
+
+
+def mtf_integral(
+    freq: NDArray[np.float64],
+    cut: NDArray[np.float64],
+    f_max: float = 0.5,
+) -> float:
+    """
+    Intégrale d'une coupe de FTM entre ``0`` et ``f_max`` (fraction de
+    ``fe``, voir :func:`mtf_frequency_axis`) — règle des trapèzes.
+
+    Une grandeur simple pour résumer "combien de contraste la FTM
+    conserve en moyenne" sur une bande de fréquence, par ex. ``[0,
+    fe/2]`` (défaut) pour tout le domaine représentable par le
+    détecteur.
+
+    Parameters
+    ----------
+    freq : NDArray
+        Axe de fréquence, voir :func:`mtf_frequency_axis`.
+    cut : NDArray
+        Coupe de FTM correspondante (même longueur), voir :func:`mtf_cuts`.
+    f_max : float, default 0.5
+        Borne supérieure de l'intégrale (fraction de ``fe``) — ``0,5``
+        (défaut) correspond à ``fe/2``, Nyquist.
+
+    Returns
+    -------
+    float
+        ``∫[0, f_max] FTM(f) df``, en unités de ``f_max`` (sans
+        dimension ici, puisque ``f`` est déjà une fraction de ``fe``).
+    """
+    mask = (freq >= 0) & (freq <= f_max)
+    return float(np.trapezoid(cut[mask], freq[mask]))
 
 
 def core_ellipticity(psf: NDArray[np.float64], radius: float = 5.0) -> float:
