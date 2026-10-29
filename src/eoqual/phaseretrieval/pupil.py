@@ -69,6 +69,49 @@ def polar_grid(npix: int, aperture_px: Optional[int] = None) -> Tuple[NDArray[np
     return rho, theta
 
 
+def detect_aperture_px(mask: NDArray[np.float64]) -> int:
+    """
+    Détecte le diamètre [px] de l'ouverture réellement illuminée dans
+    ``mask``, en mesurant l'étendue (bounding box) de ses pixels non nuls.
+
+    Sert à retrouver automatiquement l'``aperture_px`` d'un masque fourni
+    par l'appelant (généré ailleurs que par :class:`PupilGenerator`, ou
+    chargé d'une source quelconque) plutôt que de supposer à tort que son
+    ouverture remplit tout le cadre ``npix x npix`` — c'est exactement le
+    décalage d'échelle silencieux du §12.5 de ``REFERENCE_TECHNIQUE.md``,
+    mais pour la base de Zernike construite à partir d'un ``mask``
+    personnalisé plutôt que d'un masque chargé depuis un fichier (déjà
+    couvert par la détection équivalente d'``io_utils._detect_aperture_bbox``).
+
+    Suppose une ouverture centrée dans le cadre, comme :func:`polar_grid` :
+    seule l'étendue (plus grande des deux dimensions) de la bounding box
+    importe, pas sa position.
+
+    Parameters
+    ----------
+    mask : NDArray
+        Masque pupillaire ``(npix, npix)``, non nul dans l'ouverture.
+
+    Returns
+    -------
+    int
+        Diamètre détecté [px] (plus grande des étendues en ligne et en
+        colonne des pixels non nuls).
+
+    Raises
+    ------
+    ValueError
+        Si ``mask`` ne contient aucun pixel non nul.
+    """
+    lit = mask > 0
+    rows, cols = np.any(lit, axis=1), np.any(lit, axis=0)
+    if not rows.any():
+        raise ValueError("Masque entièrement nul : aucune ouverture à détecter.")
+    row_min, row_max = int(np.flatnonzero(rows)[0]), int(np.flatnonzero(rows)[-1])
+    col_min, col_max = int(np.flatnonzero(cols)[0]), int(np.flatnonzero(cols)[-1])
+    return max(row_max - row_min + 1, col_max - col_min + 1)
+
+
 class PupilGenerator:
     """
     Générateur de masques de pupille sur une grille carrée ``(N, N)``.

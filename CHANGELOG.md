@@ -106,6 +106,21 @@
   les logs (`logger.info`/`logger.warning` selon le cas) — auparavant
   seulement en `logger.debug` sur le chemin "résolution différente", et
   absente du tout sur les deux chemins "déjà sur la grille de la PSF".
+- **Correctif (§12.6)** : un masque personnalisé ("calculé par ailleurs",
+  pas via `PupilGenerator`) passé à `simulate_psf_from_zernike`/
+  `fit_zernike_from_psf`/`fit_phase_diversity` sans `aperture_px`
+  explicite était silencieusement traité comme si son ouverture
+  remplissait tout le cadre `npix` — même décalage d'échelle que §12.5,
+  par un chemin différent (masque fourni, pas généré). Le biais sur les
+  coefficients de Zernike estimés dépendait de `npix` (rapporté par
+  l'utilisateur : la divergence apparaissait en changeant la taille de
+  PSF demandée). Corrigé : `zernike_basis_orthogonal.resolve_zernike_basis`
+  auto-détecte désormais `aperture_px` depuis le `mask` fourni quand il
+  n'est pas donné explicitement (nouvelle fonction
+  `pupil.detect_aperture_px`, bounding box des pixels non nuls) ; aucun
+  changement de comportement quand le masque remplit déjà le cadre (cas
+  par défaut). Nouveaux tests, dont la reproduction exacte du rapport
+  (`tests/test_aperture_px_autodetect.py`).
 - **FTM : coupes H/V, axe de fréquence réduite, fréquence de coupure**
   (§9.5) : `diagnostics.mtf_frequency_axis`/`mtf_cutoff_frequency`/
   `mtf_cuts` (fonctions numériques pures — restées ici plutôt que dans

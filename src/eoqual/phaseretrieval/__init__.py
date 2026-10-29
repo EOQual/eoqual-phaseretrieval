@@ -54,7 +54,7 @@ from .zernike_fit import (  # noqa: F401
 )
 from .zernike_basis_orthogonal import ZernikeGramSchmidt, resolve_zernike_basis  # noqa: F401
 from .zernike_priors import build_prior_bounds, build_prior_penalty, feasible_start  # noqa: F401
-from .pupil import PupilGenerator, polar_grid  # noqa: F401
+from .pupil import PupilGenerator, detect_aperture_px, polar_grid  # noqa: F401
 from .diagnostics import (  # noqa: F401
     PSFMetrics,
     airy_psf,
@@ -98,6 +98,7 @@ __all__ = [
     "build_prior_bounds",
     "feasible_start",
     "PupilGenerator",
+    "detect_aperture_px",
     "polar_grid",
     "PSFMetrics",
     "airy_psf",

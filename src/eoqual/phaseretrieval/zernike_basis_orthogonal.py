@@ -36,6 +36,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from .optics import build_zernike_basis
+from .pupil import detect_aperture_px
 
 
 class ZernikeGramSchmidt:
@@ -254,7 +255,16 @@ def resolve_zernike_basis(
         Diamètre [px] de l'ouverture dans ``mask``, si elle ne remplit pas
         tout le cadre ``npix x npix`` — voir ``optics.build_zernike_basis``
         et §12.5 de ``REFERENCE_TECHNIQUE.md``. ``None`` (défaut) :
-        l'ouverture remplit le cadre (comportement historique).
+        **auto-détecté** depuis l'étendue des pixels non nuls de ``mask``
+        (:func:`eoqual.phaseretrieval.pupil.detect_aperture_px`) — sans
+        quoi un ``mask`` personnalisé (calculé par ailleurs, pas via
+        ``PupilGenerator``) dont l'ouverture ne remplit pas le cadre serait
+        silencieusement traité comme si elle le remplissait, avec un biais
+        qui dépend de ``npix`` (régression corrigée : voir
+        ``tests/test_orthogonal_basis.py::test_resolve_zernike_basis_autodetects_aperture_px_from_a_custom_mask_at_any_npix``).
+        Donner ``aperture_px`` explicitement reste possible pour
+        court-circuiter cette détection (ex. masque dégradé/apodisé dont la
+        bounding box ne reflète pas bien l'ouverture physique).
 
     Returns
     -------
@@ -276,6 +286,9 @@ def resolve_zernike_basis(
         ``as_basis_array`` — mieux vaut échouer explicitement que
         renvoyer des coefficients dont l'indexation a glissé.
     """
+    if aperture_px is None:
+        aperture_px = detect_aperture_px(mask)
+
     if not orthogonalize:
         return build_zernike_basis(npix=npix, nterms=nterms, aperture_px=aperture_px)
 

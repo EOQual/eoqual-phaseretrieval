@@ -93,13 +93,15 @@ class OpticalConfig:
         returned by ``io_utils.load_and_prepare_mask`` whenever it differs
         from ``psf.shape[0]`` (multi-resolution / oversampling, §12 of
         ``REFERENCE_TECHNIQUE.md``), or a ``PupilGenerator(npix,
-        aperture_px=...)`` mask built directly in memory. **Must match**
-        whatever was actually used to build ``mask``: otherwise the
-        Zernike basis is evaluated as if the aperture filled the whole
-        array — a silent scale mismatch (see §12.5 and
-        ``optics.build_zernike_basis``). ``None`` (default): the aperture
-        fills the array (historical behaviour, correct only when that is
-        actually the case).
+        aperture_px=...)`` mask built directly in memory. ``None``
+        (default): **auto-detected** from ``mask`` itself (the bounding
+        box of its non-zero pixels, see ``pupil.detect_aperture_px``) —
+        without this, a custom ``mask`` whose aperture does not fill the
+        array would silently be treated as if it did, with a bias that
+        depends on ``npix`` (see §12.5 and ``optics.build_zernike_basis``).
+        Give ``aperture_px`` explicitly to bypass that detection, or if it
+        must match a *different* convention than ``mask``'s own content
+        (e.g. ``N_pup_target`` from ``io_utils.load_and_prepare_mask``).
     known_ho_wfe_nm : NDArray, optional
         Known, **fixed** wavefront-error map [nm] — typically a high-order
         (HO) contribution beyond ``zernike_order``, measured independently

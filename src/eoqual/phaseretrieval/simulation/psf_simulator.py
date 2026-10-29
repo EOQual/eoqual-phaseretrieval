@@ -113,15 +113,15 @@ def simulate_psf_from_zernike(
         Diamètre [px] de l'ouverture à l'intérieur du cadre ``npix x
         npix`` — contrôle du suréchantillonnage, en mémoire, sans fichier
         (voir :class:`eoqual.phaseretrieval.pupil.PupilGenerator` et §12.5
-        de ``REFERENCE_TECHNIQUE.md``). N'a d'effet que si ``mask is
-        None`` (sinon c'est le masque fourni qui détermine l'ouverture
-        réelle — fournir ``aperture_px`` alors pour qu'il corresponde à ce
-        masque personnalisé). ``None`` (défaut) : l'ouverture remplit le
-        cadre (facteur de suréchantillonnage 1, comportement historique).
-        Appliqué de façon cohérente à la fois au masque généré et à la
-        base de Zernike utilisée pour simuler la phase — sans quoi la PSF
-        simulée ne correspondrait à aucune aberration physique réelle
-        (défocus tronqué, normalisation RMS fausse).
+        de ``REFERENCE_TECHNIQUE.md``). Si ``mask is None``, contrôle le
+        masque généré par défaut. Si un ``mask`` personnalisé est fourni,
+        ``None`` (défaut) **auto-détecte** l'ouverture réelle depuis ce
+        masque (:func:`eoqual.phaseretrieval.pupil.detect_aperture_px`) —
+        sinon la base de Zernike utilisée pour simuler la phase serait mal
+        échelonnée par rapport à l'ouverture réelle de ce masque, avec un
+        biais dépendant de ``npix`` (défocus tronqué, normalisation RMS
+        fausse). Donner ``aperture_px`` explicitement reste possible pour
+        court-circuiter cette détection.
     noise : DetectorNoiseConfig, optional
         Si fourni, un bruit détecteur réaliste (Poisson + lecture) est
         appliqué (voir :mod:`.noise`). Par défaut ``None`` : seule la PSF

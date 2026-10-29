@@ -79,8 +79,8 @@ class PhaseDiversityConfig:
         Diameter [px] of the aperture within ``mask``, when it does not
         fill the whole array — see
         ``backends.optimization.OpticalConfig.aperture_px`` and §12.5 of
-        ``REFERENCE_TECHNIQUE.md``. ``None`` (default): the aperture fills
-        the array (historical behaviour).
+        ``REFERENCE_TECHNIQUE.md``. ``None`` (default): auto-detected from
+        ``mask`` itself (``pupil.detect_aperture_px``).
     known_ho_wfe_nm : NDArray, optional
         Known, **fixed** wavefront-error map [nm] — typically a high-order
         (HO) contribution beyond ``zernike_order``, measured independently

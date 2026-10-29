@@ -1518,6 +1518,46 @@ marge (ouverture remplissant le cadre) ; vérifié par régression
 Historique du correctif (bug initial, pourquoi non détecté, tests
 réparés) : voir `CHANGELOG.md`.
 
+### 12.6 `aperture_px` auto-détecté depuis un masque personnalisé
+
+**Pourquoi.** §12.5 suppose que l'appelant pense à fournir le bon
+`aperture_px` chaque fois qu'il passe un `mask` dont l'ouverture ne
+remplit pas tout le cadre — vrai pour les masques générés en interne par
+`pupil.PupilGenerator(npix, aperture_px=...)`, mais pas pour un masque
+"calculé par ailleurs" (une autre fonction de l'appelant, un masque
+chargé puis manipulé hors de `io_utils.load_and_prepare_mask`...). Sans
+le bon `aperture_px`, le décalage d'échelle de §12.5 revient par un
+chemin différent : un masque personnalisé passé à
+`simulate_psf_from_zernike`/`fit_zernike_from_psf` sans `aperture_px`
+explicite était silencieusement traité comme si son ouverture remplissait
+`npix` entier — avec un biais sur les coefficients de Zernike estimés qui
+**dépend de `npix`** (plus l'ouverture réelle est petite devant `npix`,
+plus le décalage est sévère).
+
+**Le mécanisme.** `zernike_basis_orthogonal.resolve_zernike_basis` — le
+point d'entrée commun aux trois méthodes et à `simulate_psf_from_zernike`
+— auto-détecte désormais `aperture_px` depuis le `mask` fourni quand il
+n'est pas donné explicitement, via `pupil.detect_aperture_px` (bounding
+box des pixels non nuls du masque, ouverture supposée centrée comme
+`polar_grid`). `aperture_px=None` ne signifie donc plus "l'ouverture
+remplit le cadre" inconditionnellement, mais "détecter l'ouverture réelle
+depuis le masque" — ce qui redonne le comportement historique dès que le
+masque remplit effectivement le cadre (disque plein par défaut de
+`PupilGenerator`), car sa bounding box vaut alors `npix` exactement
+(vérifié par régression). Donner `aperture_px` explicitement reste
+possible pour court-circuiter la détection (masque dégradé/apodisé dont
+la bounding box ne reflète pas bien l'ouverture physique, ou convention
+différente comme `N_pup_target`).
+
+Un léger artefact de discrétisation (±1 px) existe entre le diamètre
+passé à `PupilGenerator(aperture_px=...)` et la bounding box mesurée en
+retour sur le masque généré (fenêtre de pixels inclusive aux deux bords),
+sans consequence pratique : simulation et ajustement redétectent
+indépendamment le même `aperture_px` depuis le *même* masque, donc la
+même légère valeur décalée des deux côtés — un round-trip simulate+fit
+reste exact (vérifié par régression,
+`tests/test_aperture_px_autodetect.py`).
+
 ---
 
 ## Références

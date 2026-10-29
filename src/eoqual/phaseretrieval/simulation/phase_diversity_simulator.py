@@ -77,12 +77,14 @@ class PhaseDiversitySimulationConfig:
         Diamètre [px] de l'ouverture à l'intérieur du cadre ``npix x
         npix`` — contrôle du suréchantillonnage, en mémoire (voir
         :class:`eoqual.phaseretrieval.pupil.PupilGenerator` et §12.5 de
-        ``REFERENCE_TECHNIQUE.md``). N'a d'effet que si ``mask is None``
-        dans :func:`simulate_phase_diversity_pair`. Appliqué de façon
-        cohérente au masque généré et à la base de Zernike (vérité bas
-        ordre *et* terme de diversité, tous deux construits à partir de la
-        même base). ``None`` (défaut) : l'ouverture remplit le cadre
-        (comportement historique).
+        ``REFERENCE_TECHNIQUE.md``). Si ``mask is None`` dans
+        :func:`simulate_phase_diversity_pair`, contrôle le masque généré
+        par défaut. Si un ``mask`` personnalisé est fourni, ``None``
+        (défaut) auto-détecte l'ouverture réelle depuis ce masque
+        (:func:`eoqual.phaseretrieval.pupil.detect_aperture_px`).
+        Appliqué de façon cohérente au masque généré et à la base de
+        Zernike (vérité bas ordre *et* terme de diversité, tous deux
+        construits à partir de la même base).
     """
 
     wavelength: float = 550e-9
