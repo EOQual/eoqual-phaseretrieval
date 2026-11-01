@@ -1510,6 +1510,12 @@ bout en bout avec masque *et* carte HO chacun sur un cadre plus grand que
 leur ouverture (tailles de marge différentes entre les deux) recouvre la
 vérité de Zernike.
 
+Vérification visuelle (masque natif avec marge, reconstruction correcte
+*vs* resize naïf du fichier entier sans recadrage préalable — ouverture
+mesurée artificiellement plus petite) : `examples/psf2zernike_demo.ipynb`,
+section « Vérification visuelle : le recadrage a bien lieu avant le
+changement d'échelle ».
+
 **Ouverture centrée ou non ?** `native_aperture_px` **seul** suppose
 l'ouverture **centrée** dans le fichier (même marge des deux côtés, sur
 les deux axes) : `r0 = (hauteur_fichier - taille_ouverture) // 2`, et
@@ -1652,6 +1658,54 @@ indépendamment le même `aperture_px` depuis le *même* masque, donc la
 même légère valeur décalée des deux côtés — un round-trip simulate+fit
 reste exact (vérifié par régression,
 `tests/test_aperture_px_autodetect.py`).
+
+### 12.7 Piège distinct : reconstruire soi-même la « vérité » avec `build_zernike_basis`, en oubliant `N_pup_target`
+
+**Pourquoi.** §12.5/§12.6 couvrent les chemins qui passent par
+`resolve_zernike_basis` — c'est-à-dire les trois méthodes de
+`psf_to_wfe` et `simulate_psf_from_zernike` : celui-ci reçoit déjà
+`aperture_px`, ou l'auto-détecte depuis un `mask`. Un script qui
+construit sa propre PSF de « vérité » en appelant
+`optics.build_zernike_basis` **directement** — par exemple pour
+injecter des coefficients de Zernike connus et vérifier qu'ils sont
+bien récupérés ensuite par `psf_to_wfe` — contourne ce point d'entrée
+commun. `build_zernike_basis` ne prend pas de `mask` en argument : rien
+depuis quoi auto-détecter (§12.6 ne s'applique pas ici). Il reste
+entièrement à la charge de l'appelant de lui passer le bon
+`aperture_px`.
+
+**Le piège.** `load_and_prepare_mask(psf_shape, mask_path, ...)` renvoie
+`(mask, N_pup_target)`. Si ce second élément est jeté
+(`mask_ref, _ = load_and_prepare_mask(...)`) puis que la vérité est
+construite avec `build_zernike_basis(npix=mask_ref.shape[0],
+nterms=order)` (sans `aperture_px`), la base de « vérité » suppose à
+tort que l'ouverture remplit tout le cadre `npix` — exactement le
+décalage d'échelle de §12.5, mais appliqué cette fois à la génération de
+la vérité plutôt qu'à l'ajustement. Le symptôme est trompeur :
+`psf_to_wfe`/`fit_zernike_from_psf`, eux, passent par
+`resolve_zernike_basis` et détectent correctement l'ouverture réelle
+(`N_pup_target`) depuis ce même masque — l'ajustement converge donc très
+bien (coût d'optimisation très faible, l'ajustement reproduit fidèlement
+*son propre* modèle), mais sur une échelle différente de celle de la
+« vérité » mal construite. Les coefficients de Zernike récupérés — et la
+RMSE de WFE comparée à cette vérité — n'ont alors rien à voir avec les
+coefficients injectés, malgré un ajustement en apparence réussi.
+
+**La correction** : conserver `N_pup_target` et le passer explicitement :
+
+```python
+mask_ref, n_pup_target = load_and_prepare_mask(
+    psf_shape=(128, 128), mask_path=mask_path,
+    wavelength=..., focal_length=..., pupil_diameter=..., pixel_pitch=...,
+)
+basis = build_zernike_basis(npix=mask_ref.shape[0], nterms=order, aperture_px=n_pup_target)
+```
+
+Illustré pas à pas, avec un masque natif à résolution différente de
+celle de la PSF (comme un fichier `mask.tif` réel), dans
+`examples/psf2zernike_demo.ipynb`, section « Masque à résolution native
+différente de la PSF » — tableau vérité/sans `aperture_px`/avec
+`aperture_px`, et coûts d'optimisation comparés.
 
 ---
 

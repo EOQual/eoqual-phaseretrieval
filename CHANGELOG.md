@@ -121,6 +121,17 @@
   changement de comportement quand le masque remplit déjà le cadre (cas
   par défaut). Nouveaux tests, dont la reproduction exacte du rapport
   (`tests/test_aperture_px_autodetect.py`).
+- Documentation (§12.3, §12.7 nouveau) et `examples/psf2zernike_demo.ipynb` :
+  exemple de bout en bout avec un masque à résolution native différente
+  de la PSF (comme un fichier `mask.tif` réel, avec marge de zéros
+  autour de l'ouverture), illustrant (a) un piège distinct — hors bug de
+  bibliothèque — consistant à construire soi-même une PSF de « vérité »
+  via `build_zernike_basis` en oubliant de propager le `N_pup_target`
+  renvoyé par `load_and_prepare_mask` (coût d'optimisation faible, mais
+  coefficients de Zernike récupérés totalement faux, §12.7), et (b) une
+  vérification visuelle que `_crop_to_aperture` a bien lieu avant le
+  changement d'échelle (masque correctement reconstruit comparé à un
+  resize naïf sans recadrage préalable, §12.3).
 - **FTM : coupes H/V, axe de fréquence réduite, fréquence de coupure**
   (§9.5) : `diagnostics.mtf_frequency_axis`/`mtf_cutoff_frequency`/
   `mtf_cuts` (fonctions numériques pures — restées ici plutôt que dans
