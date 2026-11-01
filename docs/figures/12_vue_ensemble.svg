@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 320" width="900" height="320" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <rect x="0" y="0" width="900" height="320" fill="#ffffff"/>
+
+  <!-- Fichier masque natif -->
+  <rect x="30" y="60" width="200" height="140" fill="#f6f8fa" stroke="#57606a" stroke-width="2"/>
+  <text x="130" y="40" text-anchor="middle" font-size="15" font-weight="600" fill="#1a1a1a">Fichier masque natif</text>
+  <text x="130" y="225" text-anchor="middle" font-size="12.5" fill="#57606a">(sa propre résolution,</text>
+  <text x="130" y="241" text-anchor="middle" font-size="12.5" fill="#57606a">souvent ≠ npix)</text>
+  <!-- aperture filling the whole native file, edge to edge -->
+  <circle cx="130" cy="130" r="68" fill="#ffffff" stroke="#1f6feb" stroke-width="2"/>
+  <text x="130" y="134" text-anchor="middle" font-size="12.5" fill="#1f6feb">ouverture</text>
+
+  <!-- arrow -->
+  <line x1="245" y1="130" x2="345" y2="130" stroke="#1a1a1a" stroke-width="2" marker-end="url(#arrow1)"/>
+  <text x="295" y="112" text-anchor="middle" font-size="12.5" fill="#1a1a1a">resize</text>
+  <text x="295" y="152" text-anchor="middle" font-size="12.5" fill="#1a1a1a">physique</text>
+  <text x="295" y="168" text-anchor="middle" font-family="SFMono-Regular, Consolas, monospace" font-size="12" fill="#57606a">(&#8594; N_pup)</text>
+
+  <!-- Grille de travail -->
+  <rect x="365" y="40" width="470" height="220" fill="#f6f8fa" stroke="#57606a" stroke-width="2"/>
+  <text x="600" y="22" text-anchor="middle" font-size="15" font-weight="600" fill="#1a1a1a">Grille de travail (PSF), npix &#215; npix</text>
+
+  <!-- centered aperture, zero-padded -->
+  <rect x="455" y="90" width="290" height="120" fill="#ffffff" stroke="#57606a" stroke-width="1.5" stroke-dasharray="5,4"/>
+  <circle cx="600" cy="150" r="58" fill="#ffffff" stroke="#1f6feb" stroke-width="2.5"/>
+  <text x="600" y="154" text-anchor="middle" font-family="SFMono-Regular, Consolas, monospace" font-size="13" fill="#1f6feb">N_pup px</text>
+
+  <!-- margin annotation -->
+  <line x1="455" y1="225" x2="835" y2="225" stroke="#57606a" stroke-width="1"/>
+  <text x="645" y="245" text-anchor="middle" font-family="SFMono-Regular, Consolas, monospace" font-size="12" fill="#57606a">marge = npix &#8722; N_pup</text>
+
+  <!-- centered, pointing from dashed box -->
+  <text x="600" y="78" text-anchor="middle" font-size="12.5" fill="#57606a">centrée, zéro-paddée tout autour</text>
+
+  <!-- pas-pixel annotation -->
+  <text x="600" y="285" text-anchor="middle" font-family="SFMono-Regular, Consolas, monospace" font-size="12" fill="#57606a">pas-pixel = pixel_pitch / oversampling</text>
+
+  <!-- shared-by footer -->
+  <text x="450" y="312" text-anchor="middle" font-size="12" fill="#1a1a1a">N_pup commun : masque (ci-dessus) &#183; carte HO (§12.2) &#183; base de Zernike (aperture_px, §12.5/§12.6)</text>
+
+  <defs>
+    <marker id="arrow1" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L9,3 L0,6 Z" fill="#1a1a1a"/>
+    </marker>
+  </defs>
+</svg>

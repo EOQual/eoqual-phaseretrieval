@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 300" width="900" height="300" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <rect x="0" y="0" width="900" height="300" fill="#ffffff"/>
+
+  <!-- Panel A: oversampling = 1 -->
+  <text x="190" y="30" text-anchor="middle" font-size="15" font-weight="600" fill="#1a1a1a">oversampling = 1</text>
+  <text x="190" y="50" text-anchor="middle" font-family="SFMono-Regular, Consolas, monospace" font-size="12" fill="#57606a">pas-pixel = pixel_pitch</text>
+  <rect x="110" y="70" width="160" height="160" fill="#f6f8fa" stroke="#57606a" stroke-width="2"/>
+  <circle cx="190" cy="150" r="66" fill="#ffffff" stroke="#1f6feb" stroke-width="2.5"/>
+  <text x="190" y="154" text-anchor="middle" font-family="SFMono-Regular, Consolas, monospace" font-size="12.5" fill="#1f6feb">N_pup</text>
+  <text x="190" y="252" text-anchor="middle" font-size="12.5" fill="#57606a">npix petit, peu de marge</text>
+
+  <!-- divider -->
+  <line x1="450" y1="55" x2="450" y2="255" stroke="#d0d7de" stroke-width="1.5"/>
+
+  <!-- Panel B: oversampling = 4 -->
+  <text x="675" y="30" text-anchor="middle" font-size="15" font-weight="600" fill="#1a1a1a">oversampling = 4</text>
+  <text x="675" y="50" text-anchor="middle" font-family="SFMono-Regular, Consolas, monospace" font-size="12" fill="#57606a">pas-pixel = pixel_pitch / 4</text>
+  <rect x="490" y="70" width="370" height="160" fill="#f6f8fa" stroke="#57606a" stroke-width="2"/>
+  <!-- SAME N_pup aperture, same absolute drawn size, just centred in a much bigger frame -->
+  <circle cx="675" cy="150" r="66" fill="#ffffff" stroke="#1f6feb" stroke-width="2.5"/>
+  <text x="675" y="154" text-anchor="middle" font-family="SFMono-Regular, Consolas, monospace" font-size="12.5" fill="#1f6feb">N_pup</text>
+  <text x="675" y="252" text-anchor="middle" font-size="12.5" fill="#57606a">npix &#215;4, MÊME N_pup, marge &#215;4</text>
+
+  <text x="450" y="285" text-anchor="middle" font-size="12.5" fill="#1a1a1a">Ce qui grandit avec <tspan font-family="SFMono-Regular, Consolas, monospace">oversampling</tspan> : la marge de padding <tspan font-family="SFMono-Regular, Consolas, monospace">npix &#8722; N_pup</tspan>, pas N_pup lui-même</text>
+</svg>

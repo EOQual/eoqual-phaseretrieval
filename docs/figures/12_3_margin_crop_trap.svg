@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 540" width="900" height="540" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <rect x="0" y="0" width="900" height="540" fill="#ffffff"/>
+
+  <!-- Source file, with margin -->
+  <text x="450" y="28" text-anchor="middle" font-size="15" font-weight="600" fill="#1a1a1a">Fichier masque, AVEC marge de zéros autour de l'ouverture</text>
+  <rect x="350" y="45" width="200" height="140" fill="#eef1f4" stroke="#57606a" stroke-width="2"/>
+  <text x="450" y="63" text-anchor="middle" font-size="11.5" fill="#8c959f">(zéros / marge)</text>
+  <circle cx="450" cy="118" r="48" fill="#ffffff" stroke="#1f6feb" stroke-width="2.5"/>
+  <text x="450" y="115" text-anchor="middle" font-size="12" fill="#1f6feb">ouverture</text>
+  <text x="450" y="129" text-anchor="middle" font-size="12" fill="#1f6feb">réelle</text>
+
+  <!-- two branches -->
+  <line x1="450" y1="185" x2="450" y2="210" stroke="#57606a" stroke-width="1.5"/>
+  <line x1="220" y1="210" x2="680" y2="210" stroke="#57606a" stroke-width="1.5"/>
+  <line x1="220" y1="210" x2="220" y2="230" stroke="#57606a" stroke-width="1.5" marker-end="url(#arrow3)"/>
+  <line x1="680" y1="210" x2="680" y2="230" stroke="#57606a" stroke-width="1.5" marker-end="url(#arrow3)"/>
+
+  <!-- LEFT: wrong path -->
+  <text x="220" y="255" text-anchor="middle" font-size="13.5" font-weight="600" fill="#cf222e">Sans _crop_to_aperture</text>
+  <text x="220" y="272" text-anchor="middle" font-size="12" fill="#57606a">tout le fichier (marge comprise)</text>
+  <text x="220" y="287" text-anchor="middle" font-size="12" fill="#57606a">redimensionné directement vers N_pup</text>
+
+  <rect x="100" y="300" width="200" height="140" fill="#eef1f4" stroke="#57606a" stroke-width="2"/>
+  <circle cx="200" cy="370" r="48" fill="#ffffff" stroke="#1f6feb" stroke-width="2"/>
+  <!-- resulting aperture: too small, shown shrunk and off, with red cross -->
+  <circle cx="200" cy="375" r="26" fill="#ffffff" stroke="#cf222e" stroke-width="2.5"/>
+  <text x="200" y="424" text-anchor="middle" font-family="SFMono-Regular, Consolas, monospace" font-size="11" fill="#cf222e">trop petite</text>
+
+  <text x="200" y="463" text-anchor="middle" font-size="12.5" fill="#cf222e" font-weight="600">&#10007; ouverture reconstruite plus PETITE</text>
+  <text x="200" y="480" text-anchor="middle" font-size="12.5" fill="#cf222e" font-weight="600">que la réalité (marge comprimée avec elle)</text>
+
+  <!-- RIGHT: correct path -->
+  <text x="680" y="255" text-anchor="middle" font-size="13.5" font-weight="600" fill="#1a7f37">Avec _crop_to_aperture</text>
+  <text x="680" y="272" text-anchor="middle" font-size="12" fill="#57606a">1) recadrer D'ABORD sur l'ouverture seule</text>
+  <text x="680" y="287" text-anchor="middle" font-size="12" fill="#57606a">2) PUIS redimensionner vers N_pup</text>
+
+  <!-- step 1: cropped aperture alone -->
+  <circle cx="610" cy="370" r="48" fill="#ffffff" stroke="#1f6feb" stroke-width="2.5"/>
+  <text x="610" y="374" text-anchor="middle" font-size="11" fill="#1f6feb">ouverture seule</text>
+
+  <line x1="663" y1="370" x2="703" y2="370" stroke="#1a1a1a" stroke-width="2" marker-end="url(#arrow3)"/>
+  <text x="683" y="358" text-anchor="middle" font-size="10.5" fill="#1a1a1a">resize</text>
+
+  <rect x="710" y="320" width="100" height="100" fill="#eef1f4" stroke="#57606a" stroke-width="2"/>
+  <circle cx="760" cy="370" r="45" fill="#ffffff" stroke="#1a7f37" stroke-width="2.5"/>
+  <text x="760" y="374" text-anchor="middle" font-family="SFMono-Regular, Consolas, monospace" font-size="11" fill="#1a7f37">N_pup</text>
+
+  <text x="680" y="463" text-anchor="middle" font-size="12.5" fill="#1a7f37" font-weight="600">&#10003; taille correcte : l'ouverture occupe</text>
+  <text x="680" y="480" text-anchor="middle" font-size="12.5" fill="#1a7f37" font-weight="600">exactement N_pup pixels</text>
+
+  <text x="450" y="520" text-anchor="middle" font-size="12" fill="#1a1a1a">Auto-détection (bounding box, <tspan font-family="SFMono-Regular, Consolas, monospace" font-size="11">aperture_threshold</tspan>) ou <tspan font-family="SFMono-Regular, Consolas, monospace" font-size="11">native_aperture_px</tspan> explicite</text>
+
+  <defs>
+    <marker id="arrow3" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L9,3 L0,6 Z" fill="#1a1a1a"/>
+    </marker>
+  </defs>
+</svg>

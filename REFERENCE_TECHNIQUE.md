@@ -1323,26 +1323,7 @@ centrée, dans le cadre `npix x npix` de la PSF — le reste n'est que la
 procédure (parfois en deux temps, §12.3) pour obtenir ce `N_pup` sans
 perdre ni déformer l'ouverture en chemin :
 
-```text
-Fichier masque natif              Grille de travail (PSF), npix x npix
-(sa propre résolution,            pas-pixel = pixel_pitch / oversampling
- souvent != npix)
-
-+--------------------+            +--------------------------------------+
-|                    |            |                                      |
-|    ouverture       |  resize    |         ouverture reconstruite       |
-|   (bord à bord     | -------->  |         N_pup pixels, CENTREE,       |
-|    du fichier)     |  physique  |         zero-paddee tout autour      |
-|                    |  (-> N_pup)|         (marge = npix - N_pup)       |
-+--------------------+            +--------------------------------------+
-
-                                              N_pup commun, utilisé par :
-                                       - le masque reconstruit (ci-dessus)
-                                       - la carte HO (même grille, §12.2)
-                                       - la base de Zernike (aperture_px,
-                                         §12.5/12.6) -- sous peine du
-                                         décalage d'échelle qui y est décrit
-```
+![Vue d'ensemble : fichier masque natif redimensionné vers une ouverture N_pup centrée et zero-paddée dans le cadre npix × npix de la PSF](docs/figures/12_vue_ensemble.svg)
 
 ### 12.1 Le principe : `pixel_pitch` + `oversampling`, pas `detector_size`
 
@@ -1373,17 +1354,7 @@ en optique de Fourier pour affiner l'échantillonnage en sortie. Ce qui
 grandit avec `oversampling`, c'est la marge de padding
 `npix - N_pup` (vérifié : `tests/test_multi_resolution.py::test_pupil_footprint_invariant_under_consistent_oversampling`) :
 
-```text
-oversampling = 1                      oversampling = 4
-pas-pixel = pixel_pitch               pas-pixel = pixel_pitch / 4
-npix petit, peu de marge              npix x4, MÊME N_pup, marge x4
-
-+-------------+                       +----------------------------------+
-| +---------+ |                       |            +---------+           |
-| |  N_pup  | |                       |            |  N_pup  |           |
-| +---------+ |                       |            +---------+           |
-+-------------+                       +----------------------------------+
-```
+![Invariance de N_pup sous oversampling : même ouverture N_pup, marge de padding npix - N_pup qui grandit avec oversampling](docs/figures/12_1_oversampling_invariance.svg)
 
 Autrement dit : suréchantillonner la PSF **n'améliore pas** la résolution
 angulaire de l'ouverture modélisée (toujours `N_pup` pixels) — ça ne fait
@@ -1447,31 +1418,7 @@ serait comprimée avec l'ouverture dans `N_pup_target` au lieu d'être
 ignorée — l'ouverture reconstruite sur la grille de travail ressortirait
 alors artificiellement plus petite qu'elle ne l'est réellement.
 
-```text
-Fichier masque, AVEC marge de zéros autour de l'ouverture :
-
-+----------------------------+
-|      (zéros / marge)       |
-|   +--------------------+   |
-|   |     ouverture       |   |
-|   |     réelle          |   |
-|   +--------------------+   |
-|      (zéros / marge)       |
-+----------------------------+
-
-Sans _crop_to_aperture : tout le fichier (marge comprise) est redimensionné
-vers N_pup -> l'ouverture reconstruite ressort plus PETITE que la réalité
-(la marge a été "comprimée" avec elle, comme si elle en faisait partie).
-
-Avec _crop_to_aperture (auto-détection ou native_aperture_px) : on
-recadre D'ABORD sur l'ouverture seule (ci-dessous), PUIS on redimensionne
-vers N_pup -> taille correcte.
-
-   +--------------------+
-   |     ouverture       |   resize (-> N_pup)   grille de travail,
-   |     seule           | --------------------> aperture correcte
-   +--------------------+
-```
+![Piège de la marge de zéros : sans _crop_to_aperture, l'ouverture reconstruite ressort plus petite que la réalité ; avec _crop_to_aperture, on recadre d'abord sur l'ouverture seule, puis on redimensionne vers N_pup](docs/figures/12_3_margin_crop_trap.svg)
 
 `load_and_prepare_mask`/`load_and_prepare_ho_wfe` recadrent donc d'abord
 sur l'ouverture (`_crop_to_aperture`) avant la mise à l'échelle physique,
@@ -1571,28 +1518,7 @@ normalisation de Noll (p. ex. $1,32$) : un défocus simulé n'a plus la
 forme physique d'un vrai défocus, et un coefficient récupéré n'a pas
 l'échelle qu'il prétend avoir.
 
-```text
-mask (npix x npix), ouverture plus petite que le cadre :
-
-+------------------------------------+
-|                                    |
-|          . . . . . . .            |
-|        . . . . . . . . .          |
-|       . . aperture_px . .         |  <- rho = 1 doit tomber ICI
-|        . . . . . . . . .          |     (bord de l'OUVERTURE),
-|          . . . . . . .            |     pas au bord du cadre npix
-|                                    |
-+------------------------------------+
-
-aperture_px = npix (par défaut, historique, FAUX ici) :
-    rho=1 au bord du CADRE -> chaque mode n'est évalué que sur sa
-    fraction interne à l'ouverture réelle (défocus tronqué, RMS != 1)
-
-aperture_px = taille réelle de l'ouverture (fourni, ou auto-détecté
-depuis le masque -- §12.6) :
-    rho=1 au bord de l'OUVERTURE -> base et masque partagent la même
-    échelle, normalisation de Noll correcte
-```
+![aperture_px et rho=1 : avec aperture_px=npix, rho=1 tombe au bord du cadre (faux, défocus tronqué) ; avec aperture_px égal à la taille réelle de l'ouverture, rho=1 tombe à son bord (correct, normalisation de Noll correcte)](docs/figures/12_5_aperture_px_rho1.svg)
 
 **Le mécanisme.** Un paramètre `aperture_px` (diamètre \[px\] de
 l'ouverture dans le cadre `npix x npix`), partagé de bout en bout via

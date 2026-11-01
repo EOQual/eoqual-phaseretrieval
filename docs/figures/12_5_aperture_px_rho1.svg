@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 460" width="900" height="460" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <rect x="0" y="0" width="900" height="460" fill="#ffffff"/>
+
+  <text x="450" y="26" text-anchor="middle" font-size="15" font-weight="600" fill="#1a1a1a">mask (npix &#215; npix), ouverture plus petite que le cadre</text>
+
+  <!-- LEFT: aperture_px = npix (wrong) -->
+  <text x="220" y="56" text-anchor="middle" font-size="13.5" font-weight="600" fill="#cf222e">aperture_px = npix (FAUX ici)</text>
+  <rect x="110" y="75" width="220" height="220" fill="#f6f8fa" stroke="#57606a" stroke-width="2"/>
+  <text x="220" y="100" text-anchor="middle" font-size="11" fill="#1f6feb">ouverture réelle</text>
+  <circle cx="220" cy="195" r="60" fill="#ffffff" stroke="#1f6feb" stroke-width="2" stroke-dasharray="4,3"/>
+  <!-- rho=1 line going to the FRAME edge, not the aperture edge -->
+  <line x1="220" y1="195" x2="330" y2="195" stroke="#cf222e" stroke-width="2.5" marker-end="url(#arrow4)"/>
+  <text x="275" y="188" text-anchor="middle" font-family="SFMono-Regular, Consolas, monospace" font-size="11" fill="#cf222e">rho=1</text>
+  <text x="220" y="270" text-anchor="middle" font-family="SFMono-Regular, Consolas, monospace" font-size="10.5" fill="#cf222e">(aperture_px = npix)</text>
+
+  <text x="220" y="320" text-anchor="middle" font-size="12" fill="#cf222e">rho=1 au bord du CADRE &#8594;</text>
+  <text x="220" y="337" text-anchor="middle" font-size="12" fill="#cf222e">défocus tronqué, RMS &#8800; 1</text>
+
+  <!-- RIGHT: aperture_px = real size (correct) -->
+  <text x="680" y="56" text-anchor="middle" font-size="13.5" font-weight="600" fill="#1a7f37">aperture_px = taille réelle</text>
+  <rect x="570" y="75" width="220" height="220" fill="#f6f8fa" stroke="#57606a" stroke-width="2"/>
+  <text x="680" y="97" text-anchor="middle" font-size="11" fill="#1f6feb">ouverture réelle</text>
+  <text x="680" y="113" text-anchor="middle" font-family="SFMono-Regular, Consolas, monospace" font-size="10.5" fill="#1f6feb">= aperture_px</text>
+  <circle cx="680" cy="195" r="60" fill="#ffffff" stroke="#1f6feb" stroke-width="2.5"/>
+  <!-- rho=1 line going exactly to the aperture edge -->
+  <line x1="680" y1="195" x2="740" y2="195" stroke="#1a7f37" stroke-width="2.5" marker-end="url(#arrow4g)"/>
+  <text x="708" y="188" text-anchor="middle" font-family="SFMono-Regular, Consolas, monospace" font-size="11" fill="#1a7f37">rho=1</text>
+
+  <text x="680" y="320" text-anchor="middle" font-size="12" fill="#1a7f37">rho=1 au bord de l'OUVERTURE &#8594;</text>
+  <text x="680" y="337" text-anchor="middle" font-size="12" fill="#1a7f37">normalisation de Noll correcte</text>
+
+  <text x="450" y="390" text-anchor="middle" font-size="12.5" fill="#1a1a1a">fourni explicitement, ou auto-détecté depuis le masque (§12.6)</text>
+  <text x="450" y="412" text-anchor="middle" font-size="12.5" fill="#1a1a1a">&#8594; base et masque doivent partager la même échelle</text>
+
+  <defs>
+    <marker id="arrow4" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L9,3 L0,6 Z" fill="#cf222e"/>
+    </marker>
+    <marker id="arrow4g" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L9,3 L0,6 Z" fill="#1a7f37"/>
+    </marker>
+  </defs>
+</svg>
