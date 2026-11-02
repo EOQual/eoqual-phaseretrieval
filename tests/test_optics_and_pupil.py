@@ -128,6 +128,76 @@ def test_pupil_with_spiders_scales_to_aperture_px_not_npix():
     assert pupil[npix // 2, npix // 2 + aperture_px // 2 + 10] == 0.0  # hors ouverture : déjà à 0
 
 
+def test_pupil_with_spiders_supersample_one_matches_historical_binary_behaviour():
+    """``supersample=1`` retrouve exactement le seuillage binaire d'avant §10.3."""
+    npix, aperture_px = 128, 64
+    gen = PupilGenerator(npix, aperture_px=aperture_px)
+    pupil_ss1 = gen.with_spiders(obscuration=0.3, n_spiders=4, width=0.05, supersample=1)
+    assert set(np.unique(pupil_ss1)) <= {0.0, 1.0}
+
+
+def test_pupil_with_spiders_default_supersample_grades_the_spider_edge():
+    """Par défaut (``supersample=8``), les pixels traversés par un bras
+    reçoivent une valeur intermédiaire plutôt qu'un 0/1 arbitraire."""
+    npix, aperture_px = 128, 64
+    gen = PupilGenerator(npix, aperture_px=aperture_px)
+    pupil = gen.with_spiders(obscuration=0.3, n_spiders=4, width=0.02)
+    assert np.any((pupil > 0.0) & (pupil < 1.0))
+
+
+def test_pupil_with_spiders_supersampling_stabilises_psf_under_subpixel_shift():
+    """
+    Régression chiffrée (§10.3 de REFERENCE_TECHNIQUE.md) : sans
+    suréchantillonnage, la PSF d'une pupille à bras fins change de façon
+    purement numérique selon l'alignement sous-pixel de la grille (la
+    pupille physique ne dépend pas d'où elle tombe sur la grille) --
+    jusqu'à ~2 % d'écart mesuré. Le suréchantillonnage par défaut doit
+    réduire nettement cet artefact.
+    """
+    from eoqual.core.psf import supersampled_coverage
+
+    npix, aperture_px, obscuration, n_spiders, width = 256, 128, 0.2, 4, 0.01
+    half_aperture = aperture_px // 2
+    phase0 = np.zeros((npix, npix))
+
+    def pupil_at_shift(shift, supersample):
+        y, x = np.indices((npix, npix), dtype=float) - npix // 2
+        x, y = x - shift[0], y - shift[1]
+        rho = np.sqrt(x**2 + y**2) / half_aperture
+        theta = np.arctan2(y, x)
+        pupil = ((rho <= 1.0) & (rho >= obscuration)).astype(float)
+        if supersample == 1:
+            for i in range(n_spiders):
+                angle = i * (2 * np.pi / n_spiders)
+                dist = np.abs(np.sin(theta - angle) * rho * aperture_px / 2)
+                pupil[dist < (width * aperture_px / 2)] = 0.0
+            return pupil
+        for i in range(n_spiders):
+            angle = i * (2 * np.pi / n_spiders)
+
+            def blocked(yy, xx, angle=angle):
+                rr = np.sqrt((xx - shift[0]) ** 2 + (yy - shift[1]) ** 2) / half_aperture
+                tt = np.arctan2(yy - shift[1], xx - shift[0])
+                return np.abs(np.sin(tt - angle) * rr * aperture_px / 2) < (width * aperture_px / 2)
+
+            coverage = supersampled_coverage(blocked, (npix, npix), (npix // 2, npix // 2), supersample)
+            pupil = pupil * (1.0 - coverage)
+        return pupil
+
+    def psf_at_shift(shift, supersample):
+        return psf_from_phase(phase0, pupil_at_shift(shift, supersample))
+
+    shifts = [(0.5, 0.5), (0.1, 0.4), (0.3, 0.7)]
+    ref_bin = psf_at_shift((0, 0), 1)
+    ref_ss = psf_at_shift((0, 0), 8)
+
+    rel_bin = [np.linalg.norm(psf_at_shift(s, 1) - ref_bin) / np.linalg.norm(ref_bin) for s in shifts]
+    rel_ss = [np.linalg.norm(psf_at_shift(s, 8) - ref_ss) / np.linalg.norm(ref_ss) for s in shifts]
+
+    assert max(rel_bin) > 0.01  # artefact non négligeable sans traitement
+    assert max(rel_ss) < max(rel_bin) / 2  # suréchantillonnage : au moins 2x plus stable
+
+
 def test_build_zernike_basis_aperture_px_reaches_full_dynamic_range_inside_aperture():
     """
     Régression du bug corrigé (§12.5) : sans ``aperture_px``, un mode

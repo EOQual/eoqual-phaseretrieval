@@ -1160,6 +1160,79 @@ une vérité pensée nativement en base standard (aberration physique connue)
 après un ajustement fait en base Gram-Schmidt (`tests/test_simulation_orthogonal.py`,
 `test_project_orthogonal_to_standard_recovers_standard_truth_approximately`).
 
+### 10.3 Bord des bras d'araignée : couverture sous-pixel, pas le contour principal
+
+Un masque de pupille discrétisé (`PupilGenerator`) approxime une forme
+continue par des pixels entièrement transparents ou opaques. Cette
+discrétisation introduit-elle une erreur suffisante pour justifier un
+traitement particulier des bords ? Mesuré empiriquement plutôt que
+supposé, la réponse dépend **entièrement** de quel bord :
+
+**Contour principal (disque, obstruction centrale) : erreur négligeable
+dans le régime normal de ce code, pas de traitement ajouté.**
+
+| `aperture_px` | erreur d'aire du masque binaire | écart de PSF (binaire vs sous-pixel) |
+|---|---|---|
+| 16 | -2,0 % | 5,0 % |
+| 32 | -0,9 % | 2,4 % |
+| 64 | -0,25 % | 1,1 % |
+| 128 | -0,12 % | 0,56 % |
+| 256 | -0,08 % | 0,29 % |
+
+L'erreur décroît en ~1/aperture_px et est déjà sous 0,3 % dès
+`aperture_px ≥ 64`, le régime habituel de ce code (voir par exemple le
+masque natif rééchantillonné à 98 px sur 128 au §12 de ce document).
+`simple_disk`/`annular` restent donc un seuillage binaire pur — y
+ajouter un traitement sous-pixel coûterait un paramètre et une
+dépendance supplémentaires pour un gain qui ne devient significatif
+qu'à `aperture_px < 32`, un régime déjà dégradé pour d'autres raisons
+(sous-échantillonnage de la PSF elle-même).
+
+**Bras d'araignée : artefact numérique mesurable, corrigé par défaut.**
+
+Un bras est fin (largeur de l'ordre du pixel : ex. `width=0.01` sur
+`aperture_px=128` → 1,3 px). Un seuillage binaire pur lui donne une
+transmission qui dépend de l'alignement sous-pixel de la grille par
+rapport au bras — un effet purement numérique, puisque la pupille
+physique ne « sait » pas où elle tombe sur la grille :
+
+![Même bras d'araignée (même géométrie) vu avec un seuillage binaire (contour en escalier, pixels tout-ou-rien) contre une couverture sous-pixel (transmission graduée au bord)](docs/figures/10_3_spider_antialiasing.svg)
+
+Mesuré en déplaçant le masque d'une fraction de pixel arbitraire (même
+géométrie physique, seul l'alignement change) :
+
+| Décalage sous-pixel | écart de PSF (binaire) | écart de Strehl (binaire) | écart de PSF (sous-pixel, `supersample=8`) |
+|---|---|---|---|
+| (0,5 ; 0,5) px | 2,0 % | -1,45 % | 0,2 % |
+| (0,1 ; 0,4) px | 1,2 % | -0,78 % | 0,13 % |
+
+Augmenter `aperture_px` ne corrige pas cet artefact (le bras reste fin en
+valeur absolue, sa largeur étant définie comme une fraction du rayon qui
+croît proportionnellement). `PupilGenerator.with_spiders(...,
+supersample=8)` (valeur par défaut) calcule donc la bande de chaque bras
+sur une grille interne 8× plus fine avant de moyenner
+(`eoqual.core.psf.supersampled_coverage`, eoqual-core ≥ 0.4.0), ce qui
+réduit l'artefact d'un facteur ~10 sur le cas ci-dessus. Le contour
+principal et l'obstruction centrale, évalués séparément
+(`PupilGenerator.annular`), restent inchangés — binaires, comme justifié
+ci-dessus. `supersample=1` retrouve le comportement historique (seuillage
+binaire pur) si besoin. Vérifié par régression
+(`tests/test_optics_and_pupil.py`,
+`test_pupil_with_spiders_supersampling_stabilises_psf_under_subpixel_shift`
+et les deux tests voisins) ; suite complète d'eoqual-phaseretrieval (82
+tests), d'eoqual-deconvolution (111 tests, `psf._supersampled` délègue
+désormais au même utilitaire core) et d'eoqual-core (45 tests) revérifiées
+sans régression après ce changement.
+
+**Fenêtres d'apodisation (cosinus, Hann, Tukey, sigmoïde, distance
+transform) : hors sujet, volontairement exclues.** Elles répondent à un
+objectif différent — modifier *délibérément* la réponse optique (p. ex.
+réduire les lobes secondaires d'un instrument apodisé) — et non réduire
+une erreur de discrétisation numérique. Les deux objectifs ne doivent pas
+être confondus : ce projet ne fournit pas de fenêtre d'apodisation, et la
+couverture sous-pixel ci-dessus n'en est pas une (elle ne fait que
+représenter plus fidèlement la géométrie *déjà* demandée).
+
 ---
 
 ## 11. Vers un modèle système complet (extensions futures)

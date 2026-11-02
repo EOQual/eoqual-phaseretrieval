@@ -69,6 +69,26 @@
 
 ## 0.2.0 (2026-10-25)
 
+- **Correctif (§10.3)** : `PupilGenerator.with_spiders` seuillait chaque
+  bras en binaire pur — pour un bras fin (largeur de l'ordre du pixel),
+  la transmission dépendait de façon quasi arbitraire de l'alignement
+  sous-pixel de la grille (artefact numérique, pas physique), mesuré
+  jusqu'à 2 % d'écart de PSF et 1,5 % de Strehl rien qu'en déplaçant le
+  masque d'une fraction de pixel. Corrigé par un nouveau paramètre
+  `supersample` (défaut `8`, `1` retrouve le comportement historique) :
+  la bande de chaque bras est calculée sur une grille interne plus fine
+  puis moyennée (`eoqual.core.psf.supersampled_coverage`, nouveau dans
+  eoqual-core 0.4.0), réduisant l'artefact d'un facteur ~10. Étude menée
+  avant implémentation pour éviter de complexifier sans gain avéré : le
+  contour principal d'une pupille (disque, obstruction centrale) n'a
+  volontairement **pas** été touché, son erreur de discrétisation étant
+  déjà < 0,3 % dès `aperture_px ≥ 64` (le régime normal de ce code) —
+  voir REFERENCE_TECHNIQUE.md §10.3 pour les deux études chiffrées.
+  Dépendance `eoqual-core` relevée de 0.1.0 à 0.4.0 (purement additif,
+  voir son CHANGELOG). 3 nouveaux tests
+  (`tests/test_optics_and_pupil.py`) ; suite complète d'eoqual-phaseretrieval
+  (82 tests), d'eoqual-deconvolution (111 tests) et d'eoqual-core
+  (45 tests) revérifiées sans régression.
 - **Correctif (bug significatif, §12.5)** : la base de Zernike était
   toujours évaluée en supposant que l'ouverture remplit tout le cadre,
   alors que `oversampling > 1` (§12.1) la zero-padde dans un cadre plus

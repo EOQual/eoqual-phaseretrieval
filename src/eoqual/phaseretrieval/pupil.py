@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import Optional, Tuple
 
 import numpy as np
+from eoqual.core.psf import supersampled_coverage
 from numpy.typing import NDArray
 
 
@@ -180,6 +181,8 @@ class PupilGenerator:
         obscuration: float,
         n_spiders: int,
         width: float,
+        *,
+        supersample: int = 8,
     ) -> NDArray[np.float64]:
         """
         Pupille annulaire avec bras d'araignée (spiders) radiaux.
@@ -193,25 +196,54 @@ class PupilGenerator:
         width : float
             Largeur d'un bras, en fraction du rayon de la pupille (ex. 0.01
             = 1 % du rayon).
+        supersample : int, default 8
+            Facteur de sous-échantillonnage pour adoucir le bord de
+            chaque bras (:func:`eoqual.core.psf.supersampled_coverage`) —
+            voir "Ce qui ne va pas sans ça" ci-dessous. ``1`` retrouve un
+            seuillage binaire pur (comportement historique).
 
         Returns
         -------
         NDArray
-            Masque binaire. C'est le cas d'usage typique du §10 de
-            ``REFERENCE_TECHNIQUE.md`` : la base de Zernike
-            standard n'est plus orthogonale sur cette pupille (les bras
-            brisent la symétrie azimutale) — utiliser
-            :class:`zernike_basis_orthogonal.ZernikeGramSchmidt` pour la
-            décomposition.
+            Masque gradué dans ``[0, 1]`` au bord des bras (binaire
+            ailleurs — le contour principal et l'obstruction centrale, eux,
+            restent un seuillage binaire pur : voir §10.3 de
+            ``REFERENCE_TECHNIQUE.md``). C'est le cas d'usage typique du
+            §10 : la base de Zernike standard n'est plus orthogonale sur
+            cette pupille (les bras brisent la symétrie azimutale) —
+            utiliser :class:`zernike_basis_orthogonal.ZernikeGramSchmidt`
+            pour la décomposition.
+
+            **Ce qui ne va pas sans ça** : un bras est typiquement fin
+            (largeur de l'ordre du pixel) — un seuillage binaire pur lui
+            donne une transmission qui dépend de façon quasi arbitraire de
+            l'alignement sous-pixel de la grille (un artefact numérique,
+            la pupille physique ne « sait » pas où elle tombe sur la
+            grille), jusqu'à 2 % d'écart de PSF et 1,5 % de Strehl rien
+            qu'en déplaçant le masque d'une fraction de pixel — réduit à
+            0,2 %/0,2 % avec le suréchantillonnage par défaut (voir §10.3).
         """
         pupil = self.annular(obscuration)
+        # Même convention de centrage que polar_grid (npix // 2, pas
+        # (npix - 1) / 2) : supersampled_coverage ne suppose rien à ce
+        # sujet, c'est à l'appelant de rester cohérent.
+        center = (self.npix // 2, self.npix // 2)
+        half_aperture = self.aperture_px // 2  # convention de polar_grid
 
         for i in range(n_spiders):
             angle = i * (2 * np.pi / n_spiders)
-            # self.rho est normalisé à l'ouverture (aperture_px), pas au
-            # cadre (npix) : reconvertir en distance pixel exige
-            # aperture_px, pas npix (identiques quand aperture_px is None).
-            dist_to_line = np.abs(np.sin(self.theta - angle) * self.rho * self.aperture_px / 2)
-            pupil[dist_to_line < (width * self.aperture_px / 2)] = 0.0
+
+            def blocked(y, x, angle=angle):
+                # Même formule que la version historique (binaire),
+                # évaluée ici sur la grille fine plutôt que sur self.rho/
+                # self.theta — voir la note sur half_aperture ci-dessus
+                # pour pourquoi ce n'est pas simplement sqrt(x^2+y^2).
+                rho = np.sqrt(x**2 + y**2) / half_aperture
+                theta = np.arctan2(y, x)
+                dist_to_line = np.abs(np.sin(theta - angle) * rho * self.aperture_px / 2)
+                return dist_to_line < (width * self.aperture_px / 2)
+
+            coverage = supersampled_coverage(blocked, (self.npix, self.npix), center, supersample)
+            pupil *= 1.0 - coverage
 
         return pupil

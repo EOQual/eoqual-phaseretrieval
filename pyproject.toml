@@ -22,7 +22,7 @@ exclude = [
 python = ">=3.10,<4.0"
 # PSF de référence, Strehl, profil radial, épinglés sur une version : voir
 # les règles de stabilité d'eoqual-core.
-eoqual-core = {git = "https://github.com/EOQual/eoqual-core.git", tag = "v0.1.0"}
+eoqual-core = {git = "https://github.com/EOQual/eoqual-core.git", tag = "v0.4.0"}
 # Fonctions graphiques Plotly génériques (heatmap 2D, comparaison de
 # courbes/coupes) — extraites de ce projet (voir CHANGELOG.md), partagées
 # avec les autres modules EOQual.
