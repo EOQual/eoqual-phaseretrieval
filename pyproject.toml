@@ -2,7 +2,7 @@
 
 [tool.poetry]
 name = "eoqual-phaseretrieval"
-version = "0.2.0"
+version = "0.3.0"
 description = "PSF -> WFE -> Zernike coefficients, by phase retrieval and phase diversity"
 authors = ["Olivier Amram <olivier.amram@free.fr>"]
 maintainers = [

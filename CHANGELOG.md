@@ -67,8 +67,34 @@
 - `license.txt` : titulaire des droits (Olivier Amram) au lieu du nom du
   module.
 
-## 0.2.0 (2026-10-25)
+## 0.3.0 (2026-11-03)
 
+- **Correctif (§12.6)** : un masque personnalisé ("calculé par ailleurs",
+  pas via `PupilGenerator`) passé à `simulate_psf_from_zernike`/
+  `fit_zernike_from_psf`/`fit_phase_diversity` sans `aperture_px`
+  explicite était silencieusement traité comme si son ouverture
+  remplissait tout le cadre `npix` — même décalage d'échelle que §12.5,
+  par un chemin différent (masque fourni, pas généré). Le biais sur les
+  coefficients de Zernike estimés dépendait de `npix` (rapporté par
+  l'utilisateur : la divergence apparaissait en changeant la taille de
+  PSF demandée). Corrigé : `zernike_basis_orthogonal.resolve_zernike_basis`
+  auto-détecte désormais `aperture_px` depuis le `mask` fourni quand il
+  n'est pas donné explicitement (nouvelle fonction
+  `pupil.detect_aperture_px`, bounding box des pixels non nuls) ; aucun
+  changement de comportement quand le masque remplit déjà le cadre (cas
+  par défaut). Nouveaux tests, dont la reproduction exacte du rapport
+  (`tests/test_aperture_px_autodetect.py`).
+- Documentation (§12.3, §12.7 nouveau) et `examples/psf2zernike_demo.ipynb` :
+  exemple de bout en bout avec un masque à résolution native différente
+  de la PSF (comme un fichier `mask.tif` réel, avec marge de zéros
+  autour de l'ouverture), illustrant (a) un piège distinct — hors bug de
+  bibliothèque — consistant à construire soi-même une PSF de « vérité »
+  via `build_zernike_basis` en oubliant de propager le `N_pup_target`
+  renvoyé par `load_and_prepare_mask` (coût d'optimisation faible, mais
+  coefficients de Zernike récupérés totalement faux, §12.7), et (b) une
+  vérification visuelle que `_crop_to_aperture` a bien lieu avant le
+  changement d'échelle (masque correctement reconstruit comparé à un
+  resize naïf sans recadrage préalable, §12.3).
 - **Correctif (§10.3)** : `PupilGenerator.with_spiders` seuillait chaque
   bras en binaire pur — pour un bras fin (largeur de l'ordre du pixel),
   la transmission dépendait de façon quasi arbitraire de l'alignement
@@ -89,6 +115,10 @@
   (`tests/test_optics_and_pupil.py`) ; suite complète d'eoqual-phaseretrieval
   (82 tests), d'eoqual-deconvolution (111 tests) et d'eoqual-core
   (45 tests) revérifiées sans régression.
+- `REFERENCE_TECHNIQUE.md` §12 : schémas en SVG (`docs/figures/`) plutôt qu'en ASCII.
+
+## 0.2.0 (2026-10-25)
+
 - **Correctif (bug significatif, §12.5)** : la base de Zernike était
   toujours évaluée en supposant que l'ouverture remplit tout le cadre,
   alors que `oversampling > 1` (§12.1) la zero-padde dans un cadre plus
@@ -126,32 +156,6 @@
   les logs (`logger.info`/`logger.warning` selon le cas) — auparavant
   seulement en `logger.debug` sur le chemin "résolution différente", et
   absente du tout sur les deux chemins "déjà sur la grille de la PSF".
-- **Correctif (§12.6)** : un masque personnalisé ("calculé par ailleurs",
-  pas via `PupilGenerator`) passé à `simulate_psf_from_zernike`/
-  `fit_zernike_from_psf`/`fit_phase_diversity` sans `aperture_px`
-  explicite était silencieusement traité comme si son ouverture
-  remplissait tout le cadre `npix` — même décalage d'échelle que §12.5,
-  par un chemin différent (masque fourni, pas généré). Le biais sur les
-  coefficients de Zernike estimés dépendait de `npix` (rapporté par
-  l'utilisateur : la divergence apparaissait en changeant la taille de
-  PSF demandée). Corrigé : `zernike_basis_orthogonal.resolve_zernike_basis`
-  auto-détecte désormais `aperture_px` depuis le `mask` fourni quand il
-  n'est pas donné explicitement (nouvelle fonction
-  `pupil.detect_aperture_px`, bounding box des pixels non nuls) ; aucun
-  changement de comportement quand le masque remplit déjà le cadre (cas
-  par défaut). Nouveaux tests, dont la reproduction exacte du rapport
-  (`tests/test_aperture_px_autodetect.py`).
-- Documentation (§12.3, §12.7 nouveau) et `examples/psf2zernike_demo.ipynb` :
-  exemple de bout en bout avec un masque à résolution native différente
-  de la PSF (comme un fichier `mask.tif` réel, avec marge de zéros
-  autour de l'ouverture), illustrant (a) un piège distinct — hors bug de
-  bibliothèque — consistant à construire soi-même une PSF de « vérité »
-  via `build_zernike_basis` en oubliant de propager le `N_pup_target`
-  renvoyé par `load_and_prepare_mask` (coût d'optimisation faible, mais
-  coefficients de Zernike récupérés totalement faux, §12.7), et (b) une
-  vérification visuelle que `_crop_to_aperture` a bien lieu avant le
-  changement d'échelle (masque correctement reconstruit comparé à un
-  resize naïf sans recadrage préalable, §12.3).
 - **FTM : coupes H/V, axe de fréquence réduite, fréquence de coupure**
   (§9.5) : `diagnostics.mtf_frequency_axis`/`mtf_cutoff_frequency`/
   `mtf_cuts` (fonctions numériques pures — restées ici plutôt que dans
