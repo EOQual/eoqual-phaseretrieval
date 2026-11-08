@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
 import numpy as np
-import poppy.zernike as zern
+from eoqual.core.pupil import noll_indices
 from numpy.typing import NDArray
 
 from .zernike_basis_orthogonal import resolve_zernike_basis
@@ -170,7 +170,7 @@ def even_azimuthal_mask(order: int) -> NDArray[np.bool_]:
         (piston, defocus, astigmatism, spherical, secondary astigmatism,
         quadrafoil, …).
     """
-    m = np.array([zern.noll_indices(j)[1] for j in range(1, order + 1)])
+    m = np.array([noll_indices(j)[1] for j in range(1, order + 1)])
     return (m % 2 == 0)
 
 
@@ -238,7 +238,7 @@ def resolve_sign_ambiguity(
     even = even_azimuthal_mask(order)
 
     if not even[reference_index - 1]:
-        n, m = zern.noll_indices(reference_index)
+        n, m = noll_indices(reference_index)
         raise ValueError(
             f"Z{reference_index} has an odd azimuthal frequency (n={n}, m={m}); "
             "it is never sign-ambiguous, so it cannot be used as the reference "

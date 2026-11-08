@@ -27,7 +27,7 @@ Voir ``README.md`` pour l'installation et le catalogue, et
 de chaque méthode.
 """
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 __title__ = "eoqual.phaseretrieval"
 __description__ = "PSF -> WFE -> Zernike coefficients, by phase retrieval and phase diversity"
 __url__ = "https://github.com/EOQual/eoqual-phaseretrieval"

@@ -30,7 +30,7 @@ licences des dépendances tierces.
 pip install git+https://github.com/EOQual/eoqual-phaseretrieval.git
 ```
 
-Toutes les dépendances (numpy, scipy, scikit-image, poppy, plotly,
+Toutes les dépendances (eoqual-core, eoqual-viz, numpy, scipy, scikit-image, plotly,
 loguru, commentjson, imageio, rich) s'installent automatiquement — voir
 `pyproject.toml`.
 
@@ -323,7 +323,7 @@ aux deux autres méthodes. Les fonctions graphiques génériques (heatmap
 MIT — voir [license.txt](license.txt). Toutes les méthodes sont des
 réimplémentations propres à partir des articles cités (aucun portage de
 code tiers) — voir [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)
-pour l'audit des seules dépendances externes (poppy, BSD-3-Clause).
+pour l'audit des dépendances externes.
 
 ## Contribuer
 
@@ -332,5 +332,4 @@ Bug, méthode manquante, cas d'usage non couvert : voir
 
 ## Credits
 
-- [poppy](https://poppy-optics.readthedocs.io/) (STScI) — base de Zernike
 - Voir [AUTHORS.md](AUTHORS.md)

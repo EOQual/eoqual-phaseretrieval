@@ -67,6 +67,21 @@
 - `license.txt` : titulaire des droits (Olivier Amram) au lieu du nom du
   module.
 
+## 0.4.0 (2026-11-08)
+
+- **Briques optiques déplacées dans eoqual-core 0.5.0** (`eoqual.core.pupil`),
+  pour être partagées avec eoqual-deconvolution (PSF paramétrique de la
+  déconvolution aveugle contrainte par l'optique) : `pupil.polar_grid`,
+  la pupille annulaire de `PupilGenerator`, `optics.phase_from_coefficients`,
+  `optics.psf_from_phase`, et la base de Zernike de
+  `optics.build_zernike_basis` / l'indexation de Noll de `zernike_fit`.
+  Les noms restent importables d'ici (API inchangée).
+- **poppy retiré des dépendances** : la base de Zernike est désormais
+  calculée par eoqual-core (écrite d'après Noll 1976), identique à
+  `poppy.zernike.zernike_basis` à 1e-15 près — mêmes grilles, même
+  normalisation, résultats inchangés (82 tests).
+- eoqual-core épinglé sur `v0.5.0`.
+
 ## 0.3.0 (2026-11-03)
 
 - **Correctif (§12.6)** : un masque personnalisé ("calculé par ailleurs",

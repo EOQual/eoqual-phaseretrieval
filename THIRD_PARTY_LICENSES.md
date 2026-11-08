@@ -16,7 +16,7 @@ directement.
 
 | Dépendance | Usage | Licence | Vérifiée via |
 |---|---|---|---|
-| [poppy](https://github.com/spacetelescope/poppy) | Base de Zernike, ordre de Noll (`optics.build_zernike_basis`, `zernike_fit.py`) | BSD-3-Clause | `LICENSE.md` du dépôt (STScI) |
+| eoqual-core | Base de Zernike (ordre de Noll), grille polaire, PSF de phase (`eoqual.core.pupil`, depuis la 0.4.0 — poppy auparavant) ; Airy, Strehl, profil radial | MIT | Projet EOQual |
 | numpy, scipy, scikit-image | Calcul numérique, optimisation (`least_squares`), redimensionnement de masque | BSD-3-Clause | Notoriété / PyPI |
 | plotly | Diagnostics visuels interactifs (`io_utils.py`) | MIT | PyPI |
 | loguru | Logs | MIT | PyPI |

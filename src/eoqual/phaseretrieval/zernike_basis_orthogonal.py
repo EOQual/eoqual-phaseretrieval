@@ -3,8 +3,8 @@
 """
 Base de Zernike ré-orthogonalisée par Gram-Schmidt, pour pupilles réelles.
 
-Les polynômes de Zernike (base ``poppy.zernike.zernike_basis`` utilisée par
-:mod:`optics`) ne sont orthogonaux que sur une pupille circulaire **pleine,
+Les polynômes de Zernike (base ``eoqual.core.pupil.zernike_basis`` utilisée
+par :mod:`optics`) ne sont orthogonaux que sur une pupille circulaire **pleine,
 non obstruée**. Pour une pupille réelle (obstruction centrale, bras
 d'araignée — le cas typique en télédétection, voir
 ``REFERENCE_TECHNIQUE.md`` §8.1) cette base n'est plus

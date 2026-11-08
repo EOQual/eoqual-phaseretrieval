@@ -5,7 +5,10 @@ Modèle optique direct : base de Zernike, synthèse de phase et PSF.
 
 Fonctions purement numériques, partagées par les méthodes de récupération
 de phase basées sur une optimisation (``backends.optimization``,
-``backends.phase_diversity``).
+``backends.phase_diversity``). La base de Zernike, la synthèse de phase et
+la PSF de Fraunhofer sont des briques d'``eoqual.core.pupil`` (partagées
+avec eoqual-deconvolution) ; ce module les expose sous leurs noms
+historiques.
 """
 
 from __future__ import annotations
@@ -13,10 +16,10 @@ from __future__ import annotations
 from typing import Optional
 
 import numpy as np
-import poppy.zernike as zern
+from eoqual.core.pupil import phase_from_coefficients, polar_grid, psf_from_phase, zernike_basis
 from numpy.typing import NDArray
 
-from .pupil import polar_grid
+__all__ = ["build_zernike_basis", "phase_from_coefficients", "wfe_map_to_phase", "psf_from_phase"]
 
 
 def build_zernike_basis(
@@ -57,35 +60,11 @@ def build_zernike_basis(
         Zernike basis, shape ``(nterms, npix, npix)``.
     """
     if aperture_px is None or aperture_px == npix:
-        return zern.zernike_basis(nterms=nterms, npix=npix, outside=0.0)
+        return zernike_basis(nterms, npix)
     rho, theta = polar_grid(npix, aperture_px)
-    return zern.zernike_basis(nterms=nterms, rho=rho, theta=theta, outside=0.0)
+    return zernike_basis(nterms, rho=rho, theta=theta)
 
 
-def phase_from_coefficients(
-    coeffs_rad: NDArray[np.float64],
-    basis: NDArray[np.float64],
-    mask: NDArray[np.float64],
-) -> NDArray[np.float64]:
-    """
-    Build a pupil phase map from Zernike coefficients.
-
-    Parameters
-    ----------
-    coeffs_rad : NDArray
-        Zernike coefficients [rad], shape ``(nterms,)``.
-    basis : NDArray
-        Zernike basis, shape ``(nterms, npix, npix)``.
-    mask : NDArray
-        Binary pupil mask, shape ``(npix, npix)``.
-
-    Returns
-    -------
-    NDArray
-        Phase map [rad], restricted to the pupil.
-    """
-    phase = np.tensordot(coeffs_rad, basis, axes=(0, 0))
-    return phase * mask
 
 
 def wfe_map_to_phase(
@@ -132,31 +111,3 @@ def wfe_map_to_phase(
         )
     rad_per_nm = (2.0 * np.pi) / (wavelength * 1e9)
     return wfe_nm * rad_per_nm * mask
-
-
-def psf_from_phase(
-    phase_rad: NDArray[np.float64],
-    mask: NDArray[np.float64],
-) -> NDArray[np.float64]:
-    """
-    Compute the (energy-normalised) focal-plane PSF for a given pupil phase.
-
-    Parameters
-    ----------
-    phase_rad : NDArray
-        Pupil phase map [rad].
-    mask : NDArray
-        Binary pupil mask.
-
-    Returns
-    -------
-    NDArray
-        PSF intensity, normalised so that its sum equals 1.
-    """
-    pupil = mask * np.exp(1j * phase_rad)
-    focal = np.fft.fftshift(np.fft.fft2(np.fft.ifftshift(pupil)))
-
-    psf = np.abs(focal) ** 2
-    psf /= psf.sum()
-
-    return psf

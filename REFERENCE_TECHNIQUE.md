@@ -1061,7 +1061,7 @@ avancées »).
 
 ## 10. Pupilles réelles : au-delà du disque plein
 
-La base de Zernike (`poppy.zernike.zernike_basis`, utilisée par
+La base de Zernike (`eoqual.core.pupil.zernike_basis`, utilisée par
 `optics.build_zernike_basis`) n'est **orthogonale que sur une pupille
 circulaire pleine, non obstruée**. Toutes nos validations (§6.4, §8) ont
 utilisé un masque simulé de ce type. Un télescope réel — en particulier en
@@ -1576,7 +1576,8 @@ séparés) reste, lui, à construire manuellement (voir
 
 **Pourquoi.** `optics.build_zernike_basis`/`zernike_basis_orthogonal.resolve_zernike_basis`
 évaluent par défaut chaque mode en supposant que l'ouverture remplit tout
-le cadre `npix` (convention par défaut de `poppy.zernike.zernike_basis`
+le cadre `npix` (convention par défaut de `eoqual.core.pupil.zernike_basis`,
+reprise de `poppy.zernike.zernike_basis`
 sans `rho`/`theta` personnalisé). Or le principe même de §12.1
 (`oversampling` > 1) est de zero-padder l'ouverture *dans* un cadre plus
 grand : elle n'occupe alors que `N_pup_target < npix` pixels. La base doit
@@ -1600,7 +1601,7 @@ l'ouverture dans le cadre `npix x npix`), partagé de bout en bout via
 par `PupilGenerator(npix, aperture_px=...)` (délimiter le masque) et par
 `optics.build_zernike_basis(npix, nterms, aperture_px=...)` (évaluer la
 base à la même échelle, via le `rho`/`theta` personnalisé que
-`poppy.zernike.zernike_basis` accepte nativement). Propagé à travers
+`eoqual.core.pupil.zernike_basis` accepte nativement). Propagé à travers
 `zernike_basis_orthogonal.ZernikeGramSchmidt`/`resolve_zernike_basis`,
 `zernike_fit.ZernikeConfig`/`fit_zernike`/`project_orthogonal_to_standard`,
 `backends.optimization.OpticalConfig`,
