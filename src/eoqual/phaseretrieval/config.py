@@ -6,7 +6,7 @@ Chaque entrée décrit : le nombre de PSF requises, la licence de
 l'implémentation (toutes réimplémentées ici à partir des articles cités,
 aucun portage de code tiers) et sa référence bibliographique principale.
 
-Voir ``README.md`` (catalogue) et ``docs/technique/reference.md`` (principe,
+Voir ``README.md`` (catalogue) et ``docs/technique/index.md`` (principe,
 implémentation, limites de chaque méthode) pour le détail.
 """
 

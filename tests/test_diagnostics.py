@@ -1,7 +1,7 @@
 """
 Diagnostics FTM : axe de fréquence réduite (fraction de fe), fréquence
 de coupure optique fc, coupes H/V, et leur visualisation Plotly — voir
-docs/technique/reference.md §9 et §12.5 (aperture_px, dont fc dépend).
+docs/technique/qualite-optique.md §9 et §12.5 (aperture_px, dont fc dépend).
 """
 
 from __future__ import annotations

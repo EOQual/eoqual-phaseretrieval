@@ -2,6 +2,11 @@
 
 ## Non publié
 
+- Référence technique découpée en documents spécialisés dans
+  `docs/technique/` (principes, implémentation, guide, observation de la
+  Terre, qualité optique, pupilles réelles, résolutions multiples, modèle
+  système, bibliographie) ; les chapitres gardent leur numéro. Renvois
+  du code, des tests et des exemples mis à jour.
 - Documentation réorganisée : documents techniques dans
   `docs/technique/`, publiés avec l'API et les notes de version par
   Sphinx et MyST (`docs/`). Les documents décrivent l'état présent ; ce

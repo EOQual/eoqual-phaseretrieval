@@ -89,7 +89,7 @@ def compute_pupil_footprint_px(
         Oversampling factor of the PSF/mask/HO-map grid relative to native
         detector sampling — e.g. ``4`` for a PSF reconstructed by
         super-resolution (Shift-and-Add, ePSF, PSFr — see §5.0 of
-        ``docs/technique/reference.md``) at 4x the native pixel pitch. ``1``
+        ``docs/technique/guide.md``) at 4x the native pixel pitch. ``1``
         (default) means ``npix`` already counts native detector pixels.
         The *effective* pixel pitch on the working grid is
         ``pixel_pitch / oversampling``.
@@ -365,7 +365,7 @@ def load_and_prepare_mask(
     exactly as in the differing-resolution case below (``native_aperture_px``/
     ``aperture_threshold`` apply here too) — same array size as the PSF
     means same resolution, not necessarily "aperture already fills the
-    frame". See §12 of ``docs/technique/reference.md`` for the general
+    frame". See §12 of ``docs/technique/resolutions.md`` for the general
     multi-resolution case (mask/PSF/HO-map each at their own native
     resolution) this function is designed for otherwise.
 
@@ -379,7 +379,7 @@ def load_and_prepare_mask(
         *not* fill the whole image edge to edge: a zero (or near-zero)
         margin around it is auto-detected and stripped before the
         physical resize — see ``native_aperture_px``/``aperture_threshold``
-        and §12.3 of ``docs/technique/reference.md``.
+        and §12.3 of ``docs/technique/resolutions.md``.
     wavelength, focal_length, pupil_diameter, pixel_pitch, oversampling
         See :func:`compute_pupil_footprint_px`.
     native_aperture_px : int, optional
@@ -458,7 +458,7 @@ def load_and_prepare_mask(
                 f"Masque déjà sur la grille de la PSF : ouverture supposée pleine cadre "
                 f"({mask_raw.shape[0]}x{mask_raw.shape[1]} px) — mise à l'échelle physique "
                 "ignorée, vérifier que c'est bien voulu si le masque vient d'un autre outil "
-                "(voir docs/technique/reference.md §12)."
+                "(voir docs/technique/resolutions.md §12)."
             )
             return mask, None
 
@@ -477,7 +477,7 @@ def load_and_prepare_mask(
             f"Masque sur la grille de la PSF ({mask_raw.shape[0]}x{mask_raw.shape[1]}) mais "
             f"ouverture détectée plus petite que le cadre ({n_pup_target}x{n_pup_target} px) : "
             "recadrée/recentrée sans changement de résolution (voir "
-            "docs/technique/reference.md §12.3/§12.5)."
+            "docs/technique/resolutions.md §12.3/§12.5)."
         )
         return mask, n_pup_target
 
@@ -539,7 +539,7 @@ def load_and_prepare_ho_wfe(
     of a smooth surface. See ``known_ho_wfe_nm`` on
     :class:`backends.optimization.OpticalConfig`/
     :class:`backends.phase_diversity.PhaseDiversityConfig` and §11.3/§12 of
-    ``docs/technique/reference.md``.
+    ``docs/technique/modele-systeme.md``.
 
     Parameters
     ----------
@@ -589,7 +589,7 @@ def load_and_prepare_ho_wfe(
         logger.warning(
             f"Carte HO déjà sur la grille de la PSF : ouverture supposée pleine cadre "
             f"({ho_wfe_raw.shape[0]}x{ho_wfe_raw.shape[1]} px) — mise à l'échelle physique "
-            "ignorée, vérifier que c'est bien voulu (voir docs/technique/reference.md §12)."
+            "ignorée, vérifier que c'est bien voulu (voir docs/technique/resolutions.md §12)."
         )
         return ho_wfe_raw.astype(np.float64)
 
@@ -631,7 +631,7 @@ def plot_mtf_cuts(
 
     Seules les fréquences positives sont tracées (convention usuelle pour
     une FTM — ``MTF(-f) == MTF(f)`` pour une PSF réelle, §9 de
-    ``docs/technique/reference.md``).
+    ``docs/technique/qualite-optique.md``).
 
     Parameters
     ----------

@@ -2,7 +2,7 @@
 A priori individuels par mode de Zernike (`zernike_priors`/`zernike_bounds`)
 — généralisation de `OpticalConfig.l2_reg` à une moyenne et un poids par
 mode (voir `eoqual.phaseretrieval.zernike_priors` et
-`docs/technique/reference.md` §6.5bis).
+`docs/technique/implementation.md` §6.5bis).
 """
 
 from __future__ import annotations
@@ -93,7 +93,7 @@ def test_zernike_priors_zero_mean_uniform_weight_matches_l2_reg():
     l2_reg avec le poids équivalent (l2_reg = weight**2 quand toutes les
     pénalités sont écrites en radians) — l2_reg n'est pas une méthode à
     part, juste le cas particulier "vers zéro, poids uniforme" de
-    zernike_priors (voir docs/technique/reference.md §6.5bis).
+    zernike_priors (voir docs/technique/implementation.md §6.5bis).
     """
     order = 12
     sim = simulate_psf_from_zernike({4: 40.0, 6: 15.0}, wavelength=WAVELENGTH, npix=NPIX, zernike_order=order)

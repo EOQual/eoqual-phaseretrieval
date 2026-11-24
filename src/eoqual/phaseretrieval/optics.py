@@ -46,7 +46,7 @@ def build_zernike_basis(
         when it differs from ``npix``). ``None`` (default): the aperture
         is assumed to fill the whole array (``aperture_px = npix``,
         historical behaviour) — correct only when that is actually the
-        case. See §12.5 of ``docs/technique/reference.md`` for why this matters:
+        case. See §12.5 of ``docs/technique/resolutions.md`` for why this matters:
         with a smaller aperture and the default ``rho``/``theta`` (which
         always place the unit circle at the array's own edge), each
         Zernike mode would only ever be evaluated over its own innermost,
@@ -81,7 +81,7 @@ def wfe_map_to_phase(
     ``zernike_order``, measured independently (see ``known_ho_wfe_nm`` on
     :class:`backends.optimization.OpticalConfig` and
     :class:`backends.phase_diversity.PhaseDiversityConfig`, and §11.3 of
-    ``docs/technique/reference.md``). Unlike :func:`phase_from_coefficients`,
+    ``docs/technique/modele-systeme.md``). Unlike :func:`phase_from_coefficients`,
     the input here is already a pixel map, not a set of modal coefficients
     — no Zernike basis involved, so any spatial pattern (not just a finite
     sum of Zernike modes) can be supplied.

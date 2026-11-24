@@ -8,7 +8,7 @@ Simule la donnée d'entrée du backend ``phase_diversity``
 (:mod:`eoqual.phaseretrieval.backends.phase_diversity`) : deux images
 d'étoile, une à focus nominal et une avec un défocus connu et
 volontairement introduit — exactement le protocole de mesure décrit au
-§5 de ``docs/technique/reference.md``. Réutilise
+§5 de ``docs/technique/guide.md``. Réutilise
 :func:`eoqual.phaseretrieval.backends.phase_diversity.diversity_phase`
 pour construire la phase de diversité, afin que le défocus simulé ici
 suive exactement la même convention (unités, signe) que celle attendue
@@ -55,7 +55,7 @@ class PhaseDiversitySimulationConfig:
     orthogonal_basis : bool, default False
         Si ``True``, les coefficients (aberration statique) sont
         interprétés dans la base ré-orthogonalisée par Gram-Schmidt sur le
-        masque (§10 de ``docs/technique/reference.md``) plutôt que la base de
+        masque (§10 de ``docs/technique/pupilles.md``) plutôt que la base de
         Noll standard — à utiliser pour tester
         ``PhaseDiversityConfig(orthogonal_basis=True)`` de façon cohérente
         (même remarque que pour ``simulate_psf_from_zernike``). Le terme
@@ -70,14 +70,14 @@ class PhaseDiversitySimulationConfig:
         Carte de WFE haut ordre (HO) [nm] ajoutée à la phase bas ordre
         dans **les deux** canaux (focus et défocus) — une contribution
         statique de l'optique, présente indépendamment du terme de
-        diversité (voir §11.3 de ``docs/technique/reference.md``) — pour tester
+        diversité (voir §11.3 de ``docs/technique/modele-systeme.md``) — pour tester
         ``PhaseDiversityConfig.known_ho_wfe_nm`` de bout en bout. ``None``
         (défaut) : pas de contribution HO.
     aperture_px : int, optional
         Diamètre [px] de l'ouverture à l'intérieur du cadre ``npix x
         npix`` — contrôle du suréchantillonnage, en mémoire (voir
         :class:`eoqual.phaseretrieval.pupil.PupilGenerator` et §12.5 de
-        ``docs/technique/reference.md``). Si ``mask is None`` dans
+        ``docs/technique/resolutions.md``). Si ``mask is None`` dans
         :func:`simulate_phase_diversity_pair`, contrôle le masque généré
         par défaut. Si un ``mask`` personnalisé est fourni, ``None``
         (défaut) auto-détecte l'ouverture réelle depuis ce masque
@@ -106,7 +106,7 @@ def simulate_phase_diversity_pair(
     """
     Simule une paire d'images d'étoile focus/défocus, à vérité de Zernike
     et de défocus connues, pour tester ``fit_phase_diversity`` de bout en
-    bout (voir §6.4 de ``docs/technique/reference.md``).
+    bout (voir §6.4 de ``docs/technique/implementation.md``).
 
     Parameters
     ----------

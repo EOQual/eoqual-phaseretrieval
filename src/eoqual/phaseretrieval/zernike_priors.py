@@ -21,7 +21,7 @@ particulier de ce mécanisme : un a priori gaussien centré sur **zéro**,
 avec le **même** poids pour tous les modes. Ce module généralise ce cas
 particulier à un a priori individuel (moyenne et poids propres à chaque
 mode), sous forme de pénalité (:func:`build_prior_penalty`) ou de borne
-dure (:func:`build_prior_bounds`) — voir ``docs/technique/reference.md`` §6.5bis
+dure (:func:`build_prior_bounds`) — voir ``docs/technique/implementation.md`` §6.5bis
 pour la discussion complète (pourquoi une option plutôt qu'un nouveau
 backend, et la comparaison de performance qui motive ce choix).
 

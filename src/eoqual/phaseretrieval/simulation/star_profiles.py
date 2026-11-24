@@ -202,7 +202,7 @@ def psf_from_pupil_field_wavelength_scaled(
     input refines the FFT's angular pixel scale exactly enough to
     compensate the larger physical Airy radius at longer wavelengths, and
     symmetrically for cropping at shorter ones — see
-    ``docs/technique/reference.md`` §6 (note sur le simulateur Bayer)
+    ``docs/technique/implementation.md`` §6 (note sur le simulateur Bayer)
     for the derivation.
 
     Raises

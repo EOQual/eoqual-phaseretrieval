@@ -66,7 +66,7 @@ class OpticalConfig:
         instead of zero and a single shared weight). Typical source: an
         as-built optical model, a prior calibration, or an error budget —
         **not** a generic assumption that high-order modes are small (see
-        ``docs/technique/reference.md`` §6.5bis for why a Kolmogorov-turbulence-style
+        ``docs/technique/implementation.md`` §6.5bis for why a Kolmogorov-turbulence-style
         decreasing-with-radial-order prior is *not*, in general, justified
         for a satellite instrument's own (non-atmospheric) WFE). ``None``
         (default) disables it. Raises ``ValueError`` if a key is not among
@@ -84,7 +84,7 @@ class OpticalConfig:
     orthogonal_basis : bool, default False
         Fit on a Gram-Schmidt basis orthogonalised on the actual mask
         (see :class:`zernike_fit.ZernikeConfig` and §10 of
-        ``docs/technique/reference.md``) instead of the standard Noll basis —
+        ``docs/technique/pupilles.md``) instead of the standard Noll basis —
         recommended for an obstructed pupil (central obstruction,
         spiders). ``False`` (default) keeps the historical behaviour.
     aperture_px : int, optional
@@ -92,7 +92,7 @@ class OpticalConfig:
         fill the whole ``psf``/``mask`` array — e.g. the ``N_pup_target``
         returned by ``io_utils.load_and_prepare_mask`` whenever it differs
         from ``psf.shape[0]`` (multi-resolution / oversampling, §12 of
-        ``docs/technique/reference.md``), or a ``PupilGenerator(npix,
+        ``docs/technique/resolutions.md``), or a ``PupilGenerator(npix,
         aperture_px=...)`` mask built directly in memory. ``None``
         (default): **auto-detected** from ``mask`` itself (the bounding
         box of its non-zero pixels, see ``pupil.detect_aperture_px``) —
@@ -107,7 +107,7 @@ class OpticalConfig:
         (HO) contribution beyond ``zernike_order``, measured independently
         (interferogram, as-built optical model, ground calibration) —
         added to the fitted low-order phase before computing the model PSF
-        (see §11.3 of ``docs/technique/reference.md``). Same shape as the PSF/
+        (see §11.3 of ``docs/technique/modele-systeme.md``). Same shape as the PSF/
         mask. Never optimised: only the Zernike coefficients up to
         ``zernike_order`` remain free parameters, exactly as if this
         contribution were absent from the pupil altogether — the point is
@@ -256,7 +256,7 @@ def fit_zernike_from_psf(
 
     # A priori individuels par mode (généralisation de l2_reg ci-dessus) :
     # voir zernike_priors.py pour la dérivation (MAP gaussien = pénalité L2,
-    # MAP uniforme = borne dure) et docs/technique/reference.md §6.5bis.
+    # MAP uniforme = borne dure) et docs/technique/implementation.md §6.5bis.
     # active contient des positions de tableau 0-based (coeffs[active] = x) ;
     # zernike_priors/zernike_bounds sont indexés en Noll (1-based) -> +1.
     prior_mean_rad, prior_weight = build_prior_penalty(

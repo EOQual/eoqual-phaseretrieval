@@ -1,6 +1,6 @@
 """
 Extension du module de simulation pour ``orthogonal_basis`` (Gram-Schmidt,
-docs/technique/reference.md §10), et conversion des coefficients ainsi obtenus
+docs/technique/pupilles.md §10), et conversion des coefficients ainsi obtenus
 vers la base de Zernike standard (``project_orthogonal_to_standard``).
 """
 
@@ -55,7 +55,7 @@ def test_simulate_psf_from_zernike_orthogonal_basis_matches_gram_schmidt_reconst
 
 def test_optimization_roundtrip_is_exact_when_simulation_and_fit_share_the_basis():
     """
-    Le point relevé précédemment (docs/technique/reference.md §10) : comparer
+    Le point relevé précédemment (docs/technique/pupilles.md §10) : comparer
     une vérité en base standard à un ajustement en base Gram-Schmidt (ou
     l'inverse) n'est pas une comparaison juste. En simulant *aussi* en
     base Gram-Schmidt, la comparaison redevient directe et quasi exacte —
@@ -156,7 +156,7 @@ def test_project_orthogonal_to_standard_is_exact_given_an_already_converged_phas
     np.testing.assert_allclose(phase_fit_nm, phase_direct_nm, atol=1e-9)
     # Z4/Z5 « héritent » un peu de défocus depuis le mélange Gram-Schmidt
     # (mode GS #4 = combinaison de Z1 (piston) et Z4 (défocus) sur ce
-    # masque annulaire, cf. docs/technique/reference.md §10) : valeurs
+    # masque annulaire, cf. docs/technique/pupilles.md §10) : valeurs
     # différentes de la vérité 55/27.5 saisie en base Gram-Schmidt, mais
     # cohérentes (mêmes valeurs qu'un fit_zernike direct ci-dessus).
     assert coeffs_std_nm[3] != pytest.approx(55.0, abs=1.0)

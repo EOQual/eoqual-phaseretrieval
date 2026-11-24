@@ -1,6 +1,6 @@
 """
 Tests de l'option ``orthogonal_basis`` (Gram-Schmidt sur pupille réelle,
-docs/technique/reference.md §10) : comportement par défaut inchangé, garde-fou
+docs/technique/pupilles.md §10) : comportement par défaut inchangé, garde-fou
 sur mode dégénéré, et récupération correcte sur une pupille obstruée
 *quand la vérité terrain est exprimée dans la même base*.
 """
@@ -46,7 +46,7 @@ def test_resolve_zernike_basis_raises_on_degenerate_mode_instead_of_shifting_ind
 
 def test_optimization_recovers_truth_expressed_in_the_orthogonalized_basis():
     """
-    Comparaison "juste" (voir docs/technique/reference.md §10) : la vérité
+    Comparaison "juste" (voir docs/technique/pupilles.md §10) : la vérité
     terrain est construite ici directement dans la base Gram-Schmidt de la
     pupille obstruée, pas dans la base standard — contrairement à
     ``simulation.simulate_psf_from_zernike``, qui utilise toujours la base

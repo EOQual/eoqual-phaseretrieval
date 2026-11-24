@@ -87,7 +87,7 @@ def simulate_psf_from_zernike(
     """
     Simule une PSF diffraction-limitée avec une aberration de Zernike
     connue — la vérité terrain nécessaire pour tester une méthode de
-    récupération de phase (§6.4 de ``docs/technique/reference.md``).
+    récupération de phase (§6.4 de ``docs/technique/implementation.md``).
 
     Parameters
     ----------
@@ -113,7 +113,7 @@ def simulate_psf_from_zernike(
         Diamètre [px] de l'ouverture à l'intérieur du cadre ``npix x
         npix`` — contrôle du suréchantillonnage, en mémoire, sans fichier
         (voir :class:`eoqual.phaseretrieval.pupil.PupilGenerator` et §12.5
-        de ``docs/technique/reference.md``). Si ``mask is None``, contrôle le
+        de ``docs/technique/resolutions.md``). Si ``mask is None``, contrôle le
         masque généré par défaut. Si un ``mask`` personnalisé est fourni,
         ``None`` (défaut) **auto-détecte** l'ouverture réelle depuis ce
         masque (:func:`eoqual.phaseretrieval.pupil.detect_aperture_px`) —
@@ -130,7 +130,7 @@ def simulate_psf_from_zernike(
         Si ``True``, ``coeffs_nm`` est interprété dans la base
         ré-orthogonalisée par Gram-Schmidt sur ``mask``
         (:func:`eoqual.phaseretrieval.zernike_basis_orthogonal.resolve_zernike_basis`,
-        §10 de ``docs/technique/reference.md``) plutôt que la base de Noll
+        §10 de ``docs/technique/pupilles.md``) plutôt que la base de Noll
         standard — à utiliser pour simuler un cas de test **cohérent**
         avec un ajustement fait via ``orthogonal_basis=True`` côté
         récupération de phase (``OpticalConfig``/``PhaseDiversityConfig``) :
@@ -144,7 +144,7 @@ def simulate_psf_from_zernike(
         Carte de WFE haut ordre (HO) [nm], forme ``(npix, npix)``, ajoutée
         à la phase bas ordre avant le calcul de la PSF — simule une
         aberration réelle non capturée par ``zernike_order`` (voir §11.3
-        de ``docs/technique/reference.md``), pour tester
+        de ``docs/technique/modele-systeme.md``), pour tester
         ``OpticalConfig.known_ho_wfe_nm`` /
         ``PhaseDiversityConfig.known_ho_wfe_nm`` de bout en bout : fournir
         la *même* carte à la simulation et à l'ajustement doit alors

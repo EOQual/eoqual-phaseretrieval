@@ -1,7 +1,7 @@
 """
 Option ``known_ho_wfe_nm`` : incorporation d'une carte de WFE haut ordre
 (HO) connue dans le modèle direct, sans jamais l'ajuster
-(docs/technique/reference.md §11.3/§2.2).
+(docs/technique/modele-systeme.md §11.3/§2.2).
 """
 
 from __future__ import annotations

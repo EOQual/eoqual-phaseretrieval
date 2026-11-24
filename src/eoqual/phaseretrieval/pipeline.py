@@ -100,7 +100,7 @@ def psf_to_wfe(
         File paths to the PSF intensity image and the pupil mask — each at
         its **own** native resolution, not necessarily matching
         ``psf_path``'s (see ``oversampling`` and §12 of
-        ``docs/technique/reference.md`` for the general multi-resolution case:
+        ``docs/technique/resolutions.md`` for the general multi-resolution case:
         a super-resolved PSF, a mask from a separate CAD/metrology tool).
     wavelength : float
         Central wavelength in metres (e.g. ``550e-9`` for 550 nm).
@@ -127,7 +127,7 @@ def psf_to_wfe(
     orthogonal_basis : bool, default False
         Fit on a Gram-Schmidt basis orthogonalised on the actual pupil
         mask (see :class:`zernike_fit.ZernikeConfig` and §10 of
-        ``docs/technique/reference.md``) instead of the standard Noll basis —
+        ``docs/technique/pupilles.md``) instead of the standard Noll basis —
         recommended whenever the pupil is not a full, unobstructed disc
         (central obstruction, spiders). ``False`` (default) keeps the
         historical behaviour, for all three methods.
@@ -147,7 +147,7 @@ def psf_to_wfe(
         pixel content (see ``aperture_threshold``) — a no-op when the
         aperture already fills the file. Only relevant on the
         physical-rescale path (source shape different from the PSF's);
-        see §12.3 of ``docs/technique/reference.md``.
+        see §12.3 of ``docs/technique/resolutions.md``.
     mask_native_aperture_center, ho_native_aperture_center : tuple of (int, int), optional
         Only used when the matching ``*_native_aperture_px`` is given:
         ``(row, col)`` pixel coordinates of the aperture's centre within
@@ -194,7 +194,7 @@ def psf_to_wfe(
         (typically ``(4, +1.0)`` for a known defocus direction), used to
         resolve the sign ambiguity inherent to single-PSF phase retrieval
         (see :func:`zernike_fit.resolve_sign_ambiguity` for the theory and
-        ``docs/technique/reference.md`` §3.7). Ignored (with a warning)
+        ``docs/technique/principes.md`` §3.7). Ignored (with a warning)
         for ``"phase_diversity"``, which is already unambiguous.
     known_ho_wfe_path : str or Path, optional
         [optimization, phase_diversity] Path to a known, fixed high-order
@@ -205,7 +205,7 @@ def psf_to_wfe(
         (interferogram, as-built optical model, ground calibration). Added
         to the modelled phase without ever being optimised, so it stops
         silently biasing the fitted low-order coefficients (see §11.3 of
-        ``docs/technique/reference.md``). Ignored (with a warning) for
+        ``docs/technique/modele-systeme.md``). Ignored (with a warning) for
         ``"gerchberg_saxton"``, whose iteration has no low/high-order
         split to attach a fixed term to.
     zernike_priors : dict, optional
@@ -214,7 +214,7 @@ def psf_to_wfe(
         residual vector as a per-mode L2 penalty (Gaussian MAP; a strict
         generalisation of ``OpticalConfig.l2_reg``, see
         :mod:`eoqual.phaseretrieval.zernike_priors` and §6.5bis of
-        ``docs/technique/reference.md`` for the derivation and the important
+        ``docs/technique/implementation.md`` for the derivation and the important
         caveat that a *decreasing-with-radial-order* prior, common in
         ground-based astronomy (Kolmogorov turbulence statistics), is
         **not** generally justified for a satellite instrument's own WFE
@@ -259,7 +259,7 @@ def psf_to_wfe(
         logger.warning(
             "known_ho_wfe_path is ignored by method='gerchberg_saxton' "
             "(no low/high-order split to attach a fixed term to — see "
-            "docs/technique/reference.md §11.3/§2.2)."
+            "docs/technique/modele-systeme.md §11.3/§2.2)."
         )
 
     if (zernike_priors or zernike_bounds) and method == "gerchberg_saxton":
@@ -267,7 +267,7 @@ def psf_to_wfe(
             "zernike_priors/zernike_bounds is ignored by "
             "method='gerchberg_saxton' (no explicit cost function on the "
             "Zernike coefficients to penalise/bound — see "
-            "docs/technique/reference.md §6.5bis)."
+            "docs/technique/implementation.md §6.5bis)."
         )
 
     # ------------------------------------------------------------------
@@ -283,7 +283,7 @@ def psf_to_wfe(
     # alors supposée remplir le cadre). Indispensable à la base de Zernike
     # (ci-dessous, aperture_px=...) pour rester à la même échelle que le
     # masque dès que oversampling > 1 introduit une marge — voir §12.5 de
-    # docs/technique/reference.md.
+    # docs/technique/index.md.
     mask, n_pup_target = load_and_prepare_mask(
         psf_shape=(N_psf, N_psf),
         mask_path=mask_path,

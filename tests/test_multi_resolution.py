@@ -1,7 +1,7 @@
 """
 Masque, carte de WFE haut ordre (HO) et PSF chacun à leur propre
 résolution — y compris une PSF suréchantillonnée (super-résolution) —
-docs/technique/reference.md §12.
+docs/technique/resolutions.md §12.
 """
 
 from __future__ import annotations
@@ -200,7 +200,7 @@ def test_end_to_end_mask_and_ho_wfe_at_different_native_resolutions_still_recove
     # (oversampling=2) — sans ce réglage la base serait évaluée comme si
     # l'ouverture remplissait tout le cadre, un décalage d'échelle
     # silencieux avec le masque réellement utilisé (voir §12.5 de
-    # docs/technique/reference.md, correctif historique de ce test).
+    # docs/technique/index.md, correctif historique de ce test).
     basis = build_zernike_basis(npix=npix_psf, nterms=25, aperture_px=n_pup)
     low_coeffs = np.zeros(25)
     low_coeffs[3], low_coeffs[4] = truth_nm[4], truth_nm[5]

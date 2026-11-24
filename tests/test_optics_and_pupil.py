@@ -29,7 +29,7 @@ def test_pupil_simple_disk_excludes_corners():
     coins) plutôt qu'un disque inscrit. Aucun test existant ne comparait
     au bon nombre de pixels (seul le centre était vérifié) ni ne vérifiait
     les coins, donc rien ne l'aurait détecté — trouvé en vérifiant la prise
-    en compte de résolutions multiples (docs/technique/reference.md §12).
+    en compte de résolutions multiples (docs/technique/resolutions.md §12).
     """
     npix = 64
     mask = PupilGenerator(npix).simple_disk()
@@ -82,7 +82,7 @@ def test_defocus_reduces_peak_strehl_like_ratio():
 
 # ----------------------------------------------------------------------
 # aperture_px : ouverture plus petite que le cadre (suréchantillonnage en
-# mémoire, §12.5 de docs/technique/reference.md).
+# mémoire, §12.5 de docs/technique/resolutions.md).
 # ----------------------------------------------------------------------
 
 def test_pupil_aperture_px_none_matches_full_frame_default():
@@ -147,7 +147,7 @@ def test_pupil_with_spiders_default_supersample_grades_the_spider_edge():
 
 def test_pupil_with_spiders_supersampling_stabilises_psf_under_subpixel_shift():
     """
-    Régression chiffrée (§10.3 de docs/technique/reference.md) : sans
+    Régression chiffrée (§10.3 de docs/technique/pupilles.md) : sans
     suréchantillonnage, la PSF d'une pupille à bras fins change de façon
     purement numérique selon l'alignement sous-pixel de la grille (la
     pupille physique ne dépend pas d'où elle tombe sur la grille) --
