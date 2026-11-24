@@ -8,7 +8,7 @@ la phase pupillaire récupérée itérativement en coefficients de Zernike.
 
 Ce module contient aussi :func:`resolve_sign_ambiguity`, un correctif de
 l'ambiguïté de signe inhérente à la récupération de phase à partir d'une seule
-PSF (voir ``REFERENCE_TECHNIQUE.md``, §2 et §3.7).
+PSF (voir ``docs/technique/reference.md``, §2 et §3.7).
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ class ZernikeConfig:
         If True, project onto a basis re-orthogonalised (Gram-Schmidt) on
         the actual pupil mask (see
         :func:`zernike_basis_orthogonal.resolve_zernike_basis`, §10 of
-        ``REFERENCE_TECHNIQUE.md``) instead of the standard Noll basis.
+        ``docs/technique/reference.md``) instead of the standard Noll basis.
         Recommended whenever the pupil is not a full, unobstructed disc
         (central obstruction, spiders) — the standard basis is not
         orthogonal there, which degrades ``condition_number`` and mixes
@@ -48,7 +48,7 @@ class ZernikeConfig:
         Diameter [px] of the aperture within ``pupil_mask``, when it does
         not fill the whole array — see
         ``zernike_basis_orthogonal.resolve_zernike_basis`` and §12.5 of
-        ``REFERENCE_TECHNIQUE.md``. ``None`` (default): the aperture fills
+        ``docs/technique/reference.md``. ``None`` (default): the aperture fills
         the array (historical behaviour).
     """
     order: int = 36
@@ -206,7 +206,7 @@ def resolve_sign_ambiguity(
     This only corrects the physical twin-image ambiguity. It does **not**
     fix a solver that failed to converge to either exact branch (check
     ``diagnostics["cost"]`` / ``"residual_rms_nm"`` first — see the
-    "Gerchberg-Saxton" caveat in ``REFERENCE_TECHNIQUE.md``, §3.7).
+    "Gerchberg-Saxton" caveat in ``docs/technique/reference.md``, §3.7).
 
     Parameters
     ----------
@@ -265,7 +265,7 @@ def project_orthogonal_to_standard(
     Re-express Gram-Schmidt-basis coefficients on the standard Noll basis.
 
     Any of the three retrieval methods can be run with
-    ``orthogonal_basis=True`` (§10 of ``REFERENCE_TECHNIQUE.md``) for a
+    ``orthogonal_basis=True`` (§10 of ``docs/technique/reference.md``) for a
     well-conditioned fit on an obstructed pupil, but the resulting
     coefficients are *not* directly labelled "defocus", "astigmatism",
     etc. beyond the first couple of modes — the Gram-Schmidt basis mixes

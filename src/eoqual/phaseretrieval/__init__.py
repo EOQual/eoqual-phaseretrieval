@@ -23,7 +23,7 @@ Public API
 >>> psf, truth = simulate_psf_from_zernike({4: 55.0, 5: 27.5}, wavelength=550e-9, npix=256, zernike_order=15)
 
 Voir ``README.md`` pour l'installation et le catalogue, et
-``REFERENCE_TECHNIQUE.md`` pour le détail théorique et d'implémentation
+``docs/technique/reference.md`` pour le détail théorique et d'implémentation
 de chaque méthode.
 """
 

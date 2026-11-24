@@ -8,7 +8,7 @@ Complète les diagnostics déjà produits par le fit Zernike lui-même
 (:mod:`zernike_fit`) avec des métriques indépendantes du modèle Zernike —
 utiles en particulier pour un premier diagnostic visuel/quantitatif *avant*
 de lancer une méthode de récupération de phase (§1 et nouvelle §9 de
-``REFERENCE_TECHNIQUE.md``), ou pour comparer plusieurs méthodes
+``docs/technique/reference.md``), ou pour comparer plusieurs méthodes
 entre elles sur un pied d'égalité.
 
 Origine : utilitaires ``PSFAnalyzer``/``PSFMetrics`` d'un prototype
@@ -113,7 +113,7 @@ def strehl_ratio(
     The Strehl ratio only depends on the peak values, not on any spatial
     shift between the two PSF. It is only meaningful if both PSF share the
     same normalisation convention (e.g. both sum to 1), the same pixel
-    scale, and the same spectral band — see ``REFERENCE_TECHNIQUE.md``
+    scale, and the same spectral band — see ``docs/technique/reference.md``
     §9 for the full list of conditions and the Maréchal quality table.
 
     A ratio significantly above 1 is not physically possible for a
@@ -297,7 +297,7 @@ def mtf_cutoff_frequency(npix: int, aperture_px: Optional[int] = None) -> float:
     Vaut ``aperture_px / npix``. Justification : l'ouverture (pupille en
     amplitude) a un diamètre ``aperture_px`` pixels dans un cadre
     ``npix`` (voir :class:`eoqual.phaseretrieval.pupil.PupilGenerator`,
-    ``OpticalConfig.aperture_px``, §12.5 de ``REFERENCE_TECHNIQUE.md``),
+    ``OpticalConfig.aperture_px``, §12.5 de ``docs/technique/reference.md``),
     donc un **rayon** ``aperture_px / 2``. La FTM = ``|FFT(PSF)|`` est
     l'autocorrélation de cette pupille, dont le support a pour **rayon**
     le double de celui de la pupille, soit ``aperture_px`` exactement
@@ -320,7 +320,7 @@ def mtf_cutoff_frequency(npix: int, aperture_px: Optional[int] = None) -> float:
         FFT peut même représenter) : le modèle PSF brut, sans marge de
         suréchantillonnage, échantillonne en-deçà du critère de Nyquist
         pour la diffraction (``Q=1``, voir §12.1/§12.5 de
-        ``REFERENCE_TECHNIQUE.md``) ; une marge ``aperture_px = npix/2``
+        ``docs/technique/reference.md``) ; une marge ``aperture_px = npix/2``
         donnerait au contraire ``fc = 0,5`` (échantillonnage de Nyquist
         exact, ``Q=2`` : ``fc`` coïncide pile avec ``fe/2``).
 

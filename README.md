@@ -6,7 +6,7 @@
 
 PSF → WFE → coefficients de Zernike : récupération de phase et diversité de
 phase, pour l'observation de la Terre — voir
-**[REFERENCE_TECHNIQUE.md](REFERENCE_TECHNIQUE.md)** pour le détail
+**[référence technique](docs/technique/reference.md)** pour le détail
 théorique et d'implémentation de chaque méthode, et
 **[THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)** pour l'audit des
 licences des dépendances tierces.
@@ -50,7 +50,7 @@ coeffs_nm, phase_fit_nm, diagnostics = psf_to_wfe(
 `method=` sélectionne l'algorithme (`"gerchberg_saxton"`, `"optimization"`
 ou `"phase_diversity"`) derrière ce même point d'entrée — voir
 `eoqual.phaseretrieval.runner.list_methods()` pour l'afficher en console,
-et [REFERENCE_TECHNIQUE.md](REFERENCE_TECHNIQUE.md) §4-8 pour savoir
+et [référence technique](docs/technique/reference.md) §4-8 pour savoir
 laquelle choisir selon le cas d'usage.
 
 Masque, carte de WFE haut ordre (`known_ho_wfe_path`) et PSF peuvent
@@ -58,7 +58,7 @@ chacun venir d'une résolution native différente — y compris une PSF
 suréchantillonnée par super-résolution (`oversampling=`), ou un fichier
 masque/carte plus grand que l'ouverture elle-même (marge de zéros autour,
 `mask_native_aperture_px=`/`ho_native_aperture_px=`) : voir
-[REFERENCE_TECHNIQUE.md](REFERENCE_TECHNIQUE.md) §12.
+[référence technique](docs/technique/reference.md) §12.
 
 Ligne de commande équivalente :
 
@@ -78,12 +78,12 @@ python -m eoqual.phaseretrieval.pipeline --method phase_diversity \
 
 Les trois méthodes sont **interchangeables** derrière `psf_to_wfe(method=...)`
 et partagent la même décomposition finale en coefficients de Zernike
-(ordre de Noll). Voir [REFERENCE_TECHNIQUE.md](REFERENCE_TECHNIQUE.md) §2-3
+(ordre de Noll). Voir [référence technique](docs/technique/reference.md) §2-3
 pour les ambiguïtés inhérentes à une reconstruction à partir d'une seule
 PSF (piston, tip-tilt, signe) et pourquoi la diversité de phase les lève.
 
 **Ajouter une 4ᵉ méthode** : voir
-[REFERENCE_TECHNIQUE.md](REFERENCE_TECHNIQUE.md) §6.5 et
+[référence technique](docs/technique/reference.md) §6.5 et
 [CONTRIBUTING.md](CONTRIBUTING.md) — l'architecture (`backends/<méthode>.py`
 + dispatch dans `pipeline.py`) est conçue pour ça, y compris pour des
 approches qui ne partagent pas le même modèle direct (ex. approches
@@ -94,7 +94,7 @@ linéarisées OTF).
 `--known_ho_wfe` en CLI ajoutent une carte de WFE mesurée indépendamment
 (interférogramme, as-built, calibration sol) au modèle direct, sans jamais
 l'ajuster — évite qu'elle ne biaise silencieusement les coefficients bas
-ordre estimés. Voir [REFERENCE_TECHNIQUE.md](REFERENCE_TECHNIQUE.md) §11.3.
+ordre estimés. Voir [référence technique](docs/technique/reference.md) §11.3.
 Non applicable à `"gerchberg_saxton"` (ignoré, avec avertissement).
 
 ## Simulation
@@ -126,7 +126,7 @@ pair = simulate_phase_diversity_pair({4: 55.0, 5: 27.5}, cfg)
 pair["psf_focus"], pair["psf_defocus"], pair["coeffs_nm"]
 ```
 
-`orthogonal_basis=True` (voir [REFERENCE_TECHNIQUE.md](REFERENCE_TECHNIQUE.md)
+`orthogonal_basis=True` (voir [référence technique](docs/technique/reference.md)
 §10) est aussi disponible côté simulation, pour tester de façon cohérente
 un ajustement fait avec `orthogonal_basis=True` sur une pupille obstruée —
 et `zernike_fit.project_orthogonal_to_standard` reconvertit après coup des
@@ -141,7 +141,7 @@ phase de bout en bout (`tests/test_known_ho_wfe.py`).
 Voir `tests/test_simulation_roundtrip.py`/`tests/test_simulation_orthogonal.py`/
 `tests/test_known_ho_wfe.py` pour des exemples complets (simulation →
 récupération de phase → comparaison à la vérité terrain) et
-[REFERENCE_TECHNIQUE.md](REFERENCE_TECHNIQUE.md) §6.4/§9 pour la
+[référence technique](docs/technique/reference.md) §6.4/§9 pour la
 discussion du modèle de bruit.
 
 ## Interface en ligne de commande
@@ -316,7 +316,7 @@ itération du solveur ; `backends/gerchberg_saxton.py` n'en a pas besoin
 aux deux autres méthodes. Les fonctions graphiques génériques (heatmap
 2D, comparaison de courbes/coupes) vivent dans
 [eoqual-viz](https://github.com/EOQual/eoqual-viz), pas ici — voir
-[REFERENCE_TECHNIQUE.md](REFERENCE_TECHNIQUE.md) §6.1.
+[référence technique](docs/technique/reference.md) §6.1.
 
 ## Licence
 

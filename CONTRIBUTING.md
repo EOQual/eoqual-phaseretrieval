@@ -19,13 +19,13 @@ Ouvrez une issue avec :
 
 Ouvrez une issue décrivant la méthode (nom, référence bibliographique, ce
 qu'elle apporte par rapport aux méthodes déjà cataloguées — voir
-`REFERENCE_TECHNIQUE.md` §3 pour le panorama complet, y compris les
+[référence technique](docs/technique/reference.md) §3 pour le panorama complet, y compris les
 familles *non* retenues à ce stade). Pas besoin de savoir l'implémenter
 pour la proposer.
 
 ## Implémenter une méthode
 
-Convention du projet (voir `REFERENCE_TECHNIQUE.md` §6.5 pour le détail) :
+Convention du projet (voir [référence technique](docs/technique/reference.md) §6.5 pour le détail) :
 une méthode = un module `src/eoqual/phaseretrieval/backends/<nom>.py`,
 avec sa propre dataclass de configuration et une fonction
 `fit_...(psf(s), mask, cfg) -> (coeffs_nm, diagnostics)`, réutilisant
@@ -59,6 +59,14 @@ un test peut être écrit sans dépendre d'aucune donnée externe.
 ## Documentation
 
 Toute méthode nouvelle ou modifiée doit rester reflétée dans `README.md`
-(catalogue) et `REFERENCE_TECHNIQUE.md` (principe, implémentation,
+(catalogue) et [référence technique](docs/technique/reference.md) (principe, implémentation,
 limites, cas d'usage) — les docstrings seules ne suffisent pas, ces deux
 documents sont la carte d'ensemble du projet.
+
+## Documentation technique
+
+Les documents de `docs/technique/` décrivent l'état présent, sans dates ni
+numéros de version : ce qui change d'une version à l'autre va dans
+`CHANGELOG.md`, et une variante de méthode écartée se décrit au présent,
+dans la section « Variantes écartées » (ou « Choix de conception ») du
+document. Construction locale du site : `make html` dans `docs/`.

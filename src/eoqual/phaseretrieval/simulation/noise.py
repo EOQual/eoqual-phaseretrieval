@@ -4,7 +4,7 @@
 Bruit détecteur réaliste, appliqué à une PSF simulée "vérité terrain".
 
 Deux composantes, indépendantes du modèle optique lui-même (§9 de
-``REFERENCE_TECHNIQUE.md`` en discute la pertinence pour la diversité de
+``docs/technique/reference.md`` en discute la pertinence pour la diversité de
 phase en télédétection) :
 
 - **Bruit de photon (Poisson)** — irréductible, dépend du flux total
@@ -38,7 +38,7 @@ class DetectorNoiseConfig:
         régime de bruit de photon (plus il est faible, plus le SNR est
         dégradé). ``1e6`` correspond à une pose courte mais confortable ;
         descendre vers ``1e3``-``1e4`` simule une acquisition faible flux
-        (cf. §8.3/§3.6 de ``REFERENCE_TECHNIQUE.md`` sur la pondération
+        (cf. §8.3/§3.6 de ``docs/technique/reference.md`` sur la pondération
         Poisson).
     read_noise_e : float
         Écart-type du bruit de lecture [électrons], indépendant du signal.

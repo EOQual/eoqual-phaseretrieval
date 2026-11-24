@@ -56,7 +56,7 @@ class PhaseDiversityConfig:
         of residuals and needlessly slow down the solver. Too small a
         value instead crops part of the signal that constrains the
         higher-order Zernike modes (which spread the PSF further out) —
-        see ``REFERENCE_TECHNIQUE.md`` §6.3 for the trade-off and
+        see ``docs/technique/reference.md`` §6.3 for the trade-off and
         a worked example.
     loss : str
         Robust loss function name passed to ``scipy.optimize.least_squares``
@@ -72,14 +72,14 @@ class PhaseDiversityConfig:
     orthogonal_basis : bool, default False
         Fit on a Gram-Schmidt basis orthogonalised on the actual mask
         (see :class:`zernike_fit.ZernikeConfig` and §10 of
-        ``REFERENCE_TECHNIQUE.md``) instead of the standard Noll basis —
+        ``docs/technique/reference.md``) instead of the standard Noll basis —
         recommended for an obstructed pupil (central obstruction,
         spiders). ``False`` (default) keeps the historical behaviour.
     aperture_px : int, optional
         Diameter [px] of the aperture within ``mask``, when it does not
         fill the whole array — see
         ``backends.optimization.OpticalConfig.aperture_px`` and §12.5 of
-        ``REFERENCE_TECHNIQUE.md``. ``None`` (default): auto-detected from
+        ``docs/technique/reference.md``. ``None`` (default): auto-detected from
         ``mask`` itself (``pupil.detect_aperture_px``).
     known_ho_wfe_nm : NDArray, optional
         Known, **fixed** wavefront-error map [nm] — typically a high-order
@@ -87,7 +87,7 @@ class PhaseDiversityConfig:
         — added to the fitted low-order phase in **both** channels (focus
         and defocus): it is a static contribution of the optics, present
         regardless of the diversity term (see §11.3 of
-        ``REFERENCE_TECHNIQUE.md``). Same shape as the PSF/mask. Never
+        ``docs/technique/reference.md``). Same shape as the PSF/mask. Never
         optimised, exactly like ``defocus`` itself. ``None`` (default)
         disables it, reproducing the original model.
     zernike_priors : dict, optional
@@ -96,7 +96,7 @@ class PhaseDiversityConfig:
         per-mode L2 penalty, exactly like
         ``backends.optimization.OpticalConfig.zernike_priors`` (same helper,
         :func:`eoqual.phaseretrieval.zernike_priors.build_prior_penalty`;
-        see its docstring and ``REFERENCE_TECHNIQUE.md`` §6.5bis for the
+        see its docstring and ``docs/technique/reference.md`` §6.5bis for the
         derivation). Unlike ``OpticalConfig``, there is no ``l2_reg`` here
         to generalise from — this is the only prior mechanism on this
         method. **Caveat specific to this method:** the pseudo-residuals
@@ -311,7 +311,7 @@ def fit_phase_diversity(
 
     # A priori individuels par mode : même mécanisme que
     # backends.optimization (voir zernike_priors.py et
-    # REFERENCE_TECHNIQUE.md §6.5bis pour la dérivation). active contient
+    # docs/technique/reference.md §6.5bis pour la dérivation). active contient
     # des positions de tableau 0-based -> +1 pour l'indexation Noll.
     prior_mean_rad, prior_weight = build_prior_penalty(
         cfg.zernike_priors or {}, active + 1, cfg.wavelength,

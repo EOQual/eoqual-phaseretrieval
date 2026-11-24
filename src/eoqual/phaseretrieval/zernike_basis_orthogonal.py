@@ -7,7 +7,7 @@ Les polynômes de Zernike (base ``eoqual.core.pupil.zernike_basis`` utilisée
 par :mod:`optics`) ne sont orthogonaux que sur une pupille circulaire **pleine,
 non obstruée**. Pour une pupille réelle (obstruction centrale, bras
 d'araignée — le cas typique en télédétection, voir
-``REFERENCE_TECHNIQUE.md`` §8.1) cette base n'est plus
+``docs/technique/reference.md`` §8.1) cette base n'est plus
 orthogonale : les modes se corrèlent, ce qui dégrade le conditionnement du
 fit (déjà surveillé par ``diagnostics["condition_number"]`` dans
 :func:`zernike_fit.fit_zernike`) et brouille l'interprétation physique de
@@ -15,7 +15,7 @@ chaque coefficient.
 
 Ce module ré-orthogonalise numériquement la base sur le masque *réel*
 fourni, par Gram-Schmidt modifié — cf. §3.7bis de
-``REFERENCE_TECHNIQUE.md`` pour le contexte et les alternatives
+``docs/technique/reference.md`` pour le contexte et les alternatives
 (polynômes annulaires de Mahajan, modes de Karhunen-Loève).
 
 Références
@@ -56,7 +56,7 @@ class ZernikeGramSchmidt:
         remplit tout le cadre (comportement historique). À renseigner
         quand ``pupil_mask`` vient d'une ouverture plus petite que son
         cadre (``pupil.PupilGenerator(npix, aperture_px=...)``,
-        suréchantillonnage — §12.5 de ``REFERENCE_TECHNIQUE.md``) : sinon
+        suréchantillonnage — §12.5 de ``docs/technique/reference.md``) : sinon
         la base brute de Noll utilisée comme point de départ de la
         ré-orthogonalisation est déjà mal échelonnée par rapport à
         l'ouverture réelle, avant même la projection Gram-Schmidt.
@@ -254,7 +254,7 @@ def resolve_zernike_basis(
     aperture_px : int, optional
         Diamètre [px] de l'ouverture dans ``mask``, si elle ne remplit pas
         tout le cadre ``npix x npix`` — voir ``optics.build_zernike_basis``
-        et §12.5 de ``REFERENCE_TECHNIQUE.md``. ``None`` (défaut) :
+        et §12.5 de ``docs/technique/reference.md``. ``None`` (défaut) :
         **auto-détecté** depuis l'étendue des pixels non nuls de ``mask``
         (:func:`eoqual.phaseretrieval.pupil.detect_aperture_px`) — sans
         quoi un ``mask`` personnalisé (calculé par ailleurs, pas via

@@ -5,7 +5,7 @@ Génération de masques de pupille : disque simple, pupille annulaire
 (obstruction centrale) et pupille avec bras d'araignée.
 
 Complète [`zernike_basis_orthogonal.py`](zernike_basis_orthogonal.py) (§10
-de ``REFERENCE_TECHNIQUE.md``) : ce module génère les pupilles
+de ``docs/technique/reference.md``) : ce module génère les pupilles
 non standard sur lesquelles la base de Zernike doit être ré-orthogonalisée,
 plutôt que de les construire à la main à chaque fois.
 
@@ -35,7 +35,7 @@ def detect_aperture_px(mask: NDArray[np.float64]) -> int:
     par l'appelant (généré ailleurs que par :class:`PupilGenerator`, ou
     chargé d'une source quelconque) plutôt que de supposer à tort que son
     ouverture remplit tout le cadre ``npix x npix`` — c'est exactement le
-    décalage d'échelle silencieux du §12.5 de ``REFERENCE_TECHNIQUE.md``,
+    décalage d'échelle silencieux du §12.5 de ``docs/technique/reference.md``,
     mais pour la base de Zernike construite à partir d'un ``mask``
     personnalisé plutôt que d'un masque chargé depuis un fichier (déjà
     couvert par la détection équivalente d'``io_utils._detect_aperture_bbox``).
@@ -85,7 +85,7 @@ class PupilGenerator:
         plus petite dans un cadre complété de zéros autour — le même
         padding que ``io_utils._resample_to_footprint`` applique en
         chargeant un masque depuis un fichier avec ``oversampling`` > 1
-        (§12.1 de ``REFERENCE_TECHNIQUE.md``), mais ici directement, pour
+        (§12.1 de ``docs/technique/reference.md``), mais ici directement, pour
         une génération de pupille **en mémoire** (module de simulation,
         tests, notebooks) sans passer par un fichier. Facteur de
         suréchantillonnage équivalent : ``npix / aperture_px``.
@@ -96,7 +96,7 @@ class PupilGenerator:
         de Zernike reste évaluée comme si l'ouverture remplissait tout le
         cadre, un décalage d'échelle silencieux (défocus tronqué,
         normalisation RMS fausse) décrit et corrigé en §12.5 de
-        ``REFERENCE_TECHNIQUE.md``.
+        ``docs/technique/reference.md``.
     """
 
     def __init__(self, npix: int, aperture_px: Optional[int] = None) -> None:
@@ -164,7 +164,7 @@ class PupilGenerator:
             Masque gradué dans ``[0, 1]`` au bord des bras (binaire
             ailleurs — le contour principal et l'obstruction centrale, eux,
             restent un seuillage binaire pur : voir §10.3 de
-            ``REFERENCE_TECHNIQUE.md``). C'est le cas d'usage typique du
+            ``docs/technique/reference.md``). C'est le cas d'usage typique du
             §10 : la base de Zernike standard n'est plus orthogonale sur
             cette pupille (les bras brisent la symétrie azimutale) —
             utiliser :class:`zernike_basis_orthogonal.ZernikeGramSchmidt`

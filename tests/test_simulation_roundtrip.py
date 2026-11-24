@@ -4,7 +4,7 @@ récupération de phase -> comparaison à la vérité terrain.
 
 Ces tests ne dépendent d'aucune donnée externe (fixtures ``.tiff``) :
 le module ``eoqual.phaseretrieval.simulation`` génère tout ce qu'il faut,
-ce qui est précisément son rôle (voir REFERENCE_TECHNIQUE.md §6.4).
+ce qui est précisément son rôle (voir docs/technique/reference.md §6.4).
 """
 
 from __future__ import annotations
@@ -139,7 +139,7 @@ def test_optimization_runs_on_noisy_psf_with_negative_pixels():
 def test_simulation_aperture_px_round_trips_without_bias():
     """
     Suréchantillonnage en mémoire (``aperture_px`` < ``npix``, §12.5 de
-    REFERENCE_TECHNIQUE.md) : la simulation ET l'ajustement doivent
+    docs/technique/reference.md) : la simulation ET l'ajustement doivent
     utiliser le même ``aperture_px`` pour que la vérité recouvrée ne soit
     pas biaisée (régression du bug corrigé : sans ce réglage cohérent, la
     base de Zernike serait mal échelonnée par rapport à l'ouverture

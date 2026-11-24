@@ -1,6 +1,6 @@
 """
 Auto-détection de ``aperture_px`` depuis un masque personnalisé (§12.5 de
-``REFERENCE_TECHNIQUE.md``) : régression du cas où l'utilisateur fournit
+``docs/technique/reference.md``) : régression du cas où l'utilisateur fournit
 un masque "calculé par ailleurs" (pas via ``PupilGenerator``) à
 ``simulate_psf_from_zernike``/``fit_zernike_from_psf`` sans préciser
 ``aperture_px`` lui-même. Avant la correction, ce masque était

@@ -8,7 +8,7 @@
 
 Les trois méthodes de récupération de phase (`gerchberg_saxton`,
 `optimization`, `phase_diversity`) sont des **réimplémentations propres**
-à partir des articles cités dans `REFERENCE_TECHNIQUE.md` §3-4 — aucun
+à partir des articles cités dans [référence technique](docs/technique/reference.md) §3-4 — aucun
 portage de code tiers, donc aucune question de licence les concernant
 directement.
 
